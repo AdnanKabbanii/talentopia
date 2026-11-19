@@ -54,7 +54,7 @@ body.in-ix #left,body.in-ix #headline,body.in-ix #bottom,body.in-ix #minimapInfo
 #ixPanel{position:absolute;right:16px;top:16px;bottom:16px;width:340px;display:none;flex-direction:column;gap:10px;background:#0f1638eb;border:1px solid #d9e4ff2b;border-radius:20px;padding:16px;color:#FAFBFF;backdrop-filter:blur(16px);overflow:auto}
 #ixPanelBody{display:flex;flex-direction:column;gap:10px}#ixPanel h3{font-size:19px;letter-spacing:-.4px;margin:0}
 .layers{display:flex;flex-wrap:wrap;gap:6px}.layers button{border:1px solid #ffffff30;background:#202c51;color:#c9d2f0;border-radius:999px;padding:7px 11px;font-size:11px;font-weight:700}.layers button.on{background:#945CFF44;border-color:#945CFF;color:#fff}
-.ix-info{background:#0C1031aa;border:1px solid #67DFF040;border-radius:14px;padding:12px;font-size:12px;line-height:1.6;color:#d6e0ff}.ix-info b{display:block;font-size:15px;color:#FAFBFF;margin-bottom:4px}
+.ix-info{background:#0C1031aa;border:1px solid #67DFF040;border-radius:14px;padding:12px;font-size:12px;line-height:1.6;color:#d6e0ff}.ix-info b{color:#FAFBFF}.ix-info>b:first-child{display:block;font-size:15px;margin-bottom:4px}
 .ix-task{background:#945CFF1f;border:1px solid #945CFF66;border-radius:14px;padding:12px;font-size:12.5px;line-height:1.55}.ix-task .bar{height:6px;background:#ffffff18;border-radius:99px;margin-top:8px;overflow:hidden}.ix-task .bar div{height:100%;background:linear-gradient(90deg,#945CFF,#67DFF0);transition:width .3s}
 .ix-task.ok{background:#8DE8C31f;border-color:#8DE8C388}.ix-task.no{background:#ff9bb21a;border-color:#ff9bb288}
 .ix-note{font-size:10px;color:#93a0c8;line-height:1.5}
@@ -156,9 +156,14 @@ function makeBuilder(w){
  const npc=g=>{w.npcs.push(g);return g};
  /* Standard floor plan: lobby (x −10…10, z 0…14) with a desk at z≈4, a corridor (x −3…3, z −16…0),
     a left room (x −18…−3, z −16…−4) and a right room (x 3…18, z −16…−4), doors at z = −10. */
+ const tile=(rx,ry)=>{if(!tileCanvas){tileCanvas=document.createElement('canvas');tileCanvas.width=tileCanvas.height=128;const x=tileCanvas.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,128,128);x.fillStyle='#e9e9ef';x.fillRect(64,0,64,64);x.fillRect(0,64,64,64);x.strokeStyle='#c4c4d0';x.lineWidth=2;x.strokeRect(1,1,126,126);x.beginPath();x.moveTo(64,0);x.lineTo(64,128);x.moveTo(0,64);x.lineTo(128,64);x.stroke()}
+  const t=new THREE.CanvasTexture(tileCanvas);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);t.encoding=THREE.sRGBEncoding;return t};
+ const dim=(c,k)=>new THREE.Color(c).multiplyScalar(k);
  const shell=o=>{
   box(80,.1,80,M(0x0a0e2a,{roughness:1}),0,-.12,-2);
-  floor(-10,0,10,14,o.lobby);floor(-3,-16,3,0,o.corridor);floor(-18,-16,-3,-4,o.left,o.leftOpts);floor(3,-16,18,-4,o.right,o.rightOpts);
+  box(20,.1,14,new THREE.MeshStandardMaterial({color:dim(o.lobby,.8),map:tile(10,7),roughness:.45,metalness:.05}),0,-.05,7);
+  box(6,.1,16,new THREE.MeshStandardMaterial({color:dim(o.corridor,.8),map:tile(3,8),roughness:.45,metalness:.05}),0,-.05,-8);
+  o={...o,wall:dim(o.wall,.86).getHex()};floor(-18,-16,-3,-4,o.left,o.leftOpts);floor(3,-16,18,-4,o.right,o.rightOpts);
   const wallM=M(o.wall,{roughness:.85}),glassM=M(0xa9dcff,{transparent:true,opacity:.28,metalness:.6,roughness:.1}),tr=M(o.trim||C.violet,{emissive:o.trim||C.violet,emissiveIntensity:.55});
   const W=(a,b,c,d,m=wallM)=>wall(a,b,c,d,m,2.8,tr);
   W(-10,14,10,14,glassM);W(-10,0,-10,14);W(10,0,10,14);W(-10,0,-3,0);W(3,0,10,0);
@@ -195,7 +200,7 @@ function build(cfg){
 
 /* ------------------------------------------------------------------ runtime state */
 const camera=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,.05,200);
-let cur=null,W=null,avatar=null,active=false,mode='walk',objIdx=0,t=0,lastNow=0,camZoom=1,walkPhase=0,panel=null;
+let tileCanvas=null;let cur=null,W=null,avatar=null,active=false,mode='walk',objIdx=0,t=0,lastNow=0,camZoom=1,walkPhase=0,panel=null;
 const keys=new Set(),joy={x:0,y:0};let moveTarget=null,route=[],pendingHot=null,stuck={best:1e9,t:0},currentHot=null;
 const camPos=new THREE.Vector3(),camLook=new THREE.Vector3(),tmpV=new THREE.Vector3();
 const ray=new THREE.Raycaster(),ptr=new THREE.Vector2(),floorPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
@@ -216,11 +221,12 @@ function dialog(who,html,opts){mode='dialog';hidePrompt();$('ixNova').style.disp
  d.innerHTML=`<div class="who">${esc(who)}</div><div class="txt">${html}</div><div class="opts">${opts.map((o,i)=>`<button data-o="${i}">${o.label}</button>`).join('')}</div>`;d.style.display='block';
  d.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>opts[+b.dataset.o].fn(b));const f=d.querySelector('button');if(f)f.focus({preventScroll:true});}
 function closeDialog(){$('ixDialog').style.display='none';mode='walk';$('ixNova').style.display='flex'}
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 function question(who,html,options,correct,explain,next){let first=true;
- dialog(who,html,options.map((label,i)=>({label,fn:b=>{const d=$('ixDialog');let fb=d.querySelector('.fb');if(!fb){fb=document.createElement('div');d.appendChild(fb)}
+ dialog(who,html,shuffle(options.map((label,i)=>({label,fn:b=>{const d=$('ixDialog');let fb=d.querySelector('.fb');if(!fb){fb=document.createElement('div');d.appendChild(fb)}
   if(i!==correct){first=false;b.classList.add('bad');b.disabled=true;fb.className='fb warn';fb.textContent='Not quite. Think about it again and try another answer.';return}
   d.querySelectorAll('[data-o]').forEach(x=>x.disabled=true);b.classList.add('good');fb.className='fb';fb.innerHTML='✓ '+explain;
-  const c=document.createElement('button');c.className='ix-primary';c.textContent='Continue →';c.onclick=()=>next(first);d.appendChild(c);c.focus({preventScroll:true});}})));}
+  const c=document.createElement('button');c.className='ix-primary';c.textContent='Continue →';c.onclick=()=>next(first);d.appendChild(c);c.focus({preventScroll:true});}}))));}
 
 /* focus panels (anatomy studio, loan desk…) */
 function openPanel(p){panel=p;mode='panel';hidePrompt();stopMove();$('ixPanelBody').innerHTML=p.html;$('ixPanel').style.display='flex';$('ixNova').style.display='none';$('ixObj').style.display='none';W.beacon.visible=false;
@@ -335,7 +341,7 @@ $('ixExit').onclick=exit;$('ixDoneCity').onclick=()=>{$('ixDone').style.display=
 $('ixDoneReplay').onclick=()=>{$('ixDone').style.display='none';resetShift();mode='walk';renderObjectives()};
 
 window.TalentopiaInterior={get active(){return active},frame,exit,
- register(cfg){window.TalentopiaInteriors[cfg.id]={enter:()=>enter(cfg),label:cfg.enterLabel,badge:cfg.badge};}};
+ register(cfg){window.TalentopiaInteriors[cfg.id]={enter:()=>enter(cfg),label:cfg.enterLabel,badge:cfg.badge,title:cfg.title};}};
 addEventListener('load',()=>{const m=location.search.match(/[?&]enter=([a-z]+)/)||(/[?&]medcity\b/.test(location.search)?[0,'med']:null);
  const d=m&&window.TalentopiaInteriors[m[1]];if(d){const i=$('intro');if(i)i.classList.remove('open');d.enter()}});
 })();

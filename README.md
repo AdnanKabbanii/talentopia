@@ -15,6 +15,26 @@ An original browser-based 3D city experience, intended as the first working proo
 - Career Passport, discovery badges and XP (stored locally on the browser device).
 - Desktop and mobile responsive interface, including a guest welcome flow.
 
+## What's new in V6: every district is a real building + a realistic city
+
+- **All 10 districts are walkable 3D workplaces.** Click any building in the city (or pick it in the list): the camera dives in, a themed "Entering…" portal plays, and you start a shift inside.
+  | District | Building | Hands-on missions (all genuinely computed) |
+  |---|---|---|
+  | MedCity | Hospital | Layered 3D anatomy + quiz, vital signs, safe escalation |
+  | Capital Bay | Bank | KYC, compound interest, loan affordability (DSCR), stress test |
+  | Creative Quarter | Design agency | WCAG colour-contrast poster design, campaign budget model, honest advertising |
+  | Forge & Form | Engineering firm | Beam test with a bending 3D beam (M = PL/4), build sequence, safety, ethics |
+  | Code Nexus | Tech HQ | Debug with real unit tests, phishing investigation, responsible AI |
+  | Taste District | Restaurant "Saffron & Salt" | Recipe scaling + food cost %, temperature safety checks, allergen order |
+  | Planet Lab | Research centre | River water testing (scientific method), solar array sizing, process-safety alarm |
+  | Civic Square | Courtroom + classroom | Evidence evaluation, burden of proof, class-results data, counselling ethics |
+  | Market Street | Store | Customer returns, reorder point, pricing margin vs markup |
+  | Skyport | Aviation centre | Full-size aircraft walk-around, fuel planning, crosswind go/delay decision |
+- **Realistic city:** dusk sky with sun, soft shadows, lit-window facades, glowing building entrances, streets with lanes, crosswalks and street lamps, moving cars and buses, pedestrians, a waterfront bay and skyline, and a Talentopia tower. Perspective camera; hover a building to see "Enter …".
+- Interiors have tiled floors and deeper tones; quiz answers are shuffled so the correct one isn't always first.
+
+**Files to upload when hosting:** `index.html`, `interior.js` and the 10 district files (`medcity.js`, `capitalbay.js`, `codenexus.js`, `creative.js`, `forge.js`, `taste.js`, `planetlab.js`, `civic.js`, `market.js`, `skyport.js`). With the GitHub → Vercel setup, pushing to `main` is enough.
+
 ## What's new in V5: Code Nexus HQ
 
 Open Code Nexus in the city → **"Enter Code Nexus HQ"** (or add `?enter=nexus` to the URL). It's an engineering shift:
@@ -25,7 +45,6 @@ Open Code Nexus in the city → **"Enter Code Nexus HQ"** (or add `?enter=nexus`
 4. **Debrief with Priya:** what comes first when building an AI that uses student data (consent, data minimisation, security, bias testing).
 5. **Badge:** *Code Nexus Problem Solver* (+150 XP, plus +60 for each mission).
 
-**Files to upload when hosting:** `index.html`, `interior.js`, `medcity.js`, `capitalbay.js`, `codenexus.js`.
 
 ## What's new in V4: Capital Bay Bank + shared interior engine
 
