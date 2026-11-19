@@ -1,5 +1,9 @@
 # TALENTOPIA • Talent City (interactive web prototype)
 
+**Live:** https://talentopia.vercel.app · **QR / 60-second mission:** https://talentopia.vercel.app/?qr=1 (QR images: `talentopia-qr.png`, `talentopia-qr.svg`)
+
+Hosting: Vercel project `talentopia` (Adnan's projects), deployed from this GitHub repo. Every push to `main` redeploys automatically.
+
 An original browser-based 3D city experience, intended as the first working proof of concept for a virtual career-learning platform.
 
 ## What's included
