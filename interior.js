@@ -79,6 +79,7 @@ hud.innerHTML=`
 <div id="ixEditor" class="mh"><div class="ix-card">
  <div class="k">Step 1 · Your avatar</div><h2>Create your look</h2><p>Your avatar is a stylized character, never generated from your appearance. It follows you into every building, and you can change it anytime.</p>
  <div class="ed-row"><label for="edName">Display name</label><input id="edName" maxlength="24" placeholder="Future Explorer"></div>
+ <div class="ed-row" id="edCharRow" style="display:none"><label>Character</label><div class="chips" id="edChar"></div></div>
  <div class="ed-row"><label>Skin tone</label><div class="swatches" id="edSkin"></div></div>
  <div class="ed-row"><label>Hair style</label><div class="chips" id="edStyle"></div></div>
  <div class="ed-row"><label>Hair colour</label><div class="swatches" id="edHair"></div></div>
@@ -112,6 +113,30 @@ function panelTexture(title,lines,color,draw){
  const t=new THREE.CanvasTexture(cv);t.encoding=THREE.sRGBEncoding;return t;
 }
 function screen(scene,w,h,tex,x,y,z,ry=0){const p=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex}));p.position.set(x,y,z);p.rotation.y=ry;scene.add(p);return p}
+/* ---------- realistic characters (Mixamo FBX in assets/people/) ----------
+   Loaded lazily on first building entry. If the files are missing, the stylized
+   primitive people below are used instead, so nothing breaks. */
+const PEOPLE=[['woman1','Woman 1'],['woman2','Woman 2'],['woman3','Woman 3'],['man1','Man 1'],['man2','Man 2'],['man3','Man 3']];
+const people={tried:false,ready:false,models:{},walk:null,talk:null};const personGroups=[];
+const PEOPLE_ENABLED=false; // set to true once the Mixamo .fbx files are in assets/people/
+function loadPeople(){if(!PEOPLE_ENABLED||people.tried||!THREE.FBXLoader||!THREE.SkeletonUtils)return;people.tried=true;const L=new THREE.FBXLoader();
+ const get=n=>new Promise(res=>{try{L.load('assets/people/'+n+'.fbx',o=>res(o),undefined,()=>res(null))}catch(e){res(null)}});
+ Promise.all([...PEOPLE.map(p=>get(p[0])),get('walk'),get('talk')]).then(arr=>{PEOPLE.forEach((p,i)=>{if(arr[i])people.models[p[0]]=arr[i]});
+  const w=arr[PEOPLE.length],t=arr[PEOPLE.length+1];if(w&&w.animations[0])people.walk=w.animations[0];if(t&&t.animations[0])people.talk=t.animations[0];
+  people.ready=Object.keys(people.models).length>0;if(people.ready)upgradePeople()})}
+const hashOf=o=>Math.abs(Math.floor((o.skin||1)*7+(o.hair||3)*13+(o.outfit||5)*3+(o.pants||0)))%997;
+function pickModel(o){const names=Object.keys(people.models);if(!names.length)return null;if(o.model&&people.models[o.model])return o.model;
+ const fem=o.style==='long'||o.style==='bun';let pool=names.filter(n=>fem?n.startsWith('woman'):n.startsWith('man'));if(!pool.length)pool=names;return pool[hashOf(o)%pool.length]}
+function attachModel(g){const o=g.userData.personOpts;if(!o||g.userData.model||!people.ready)return;const name=pickModel(o);if(!name)return;
+ const src=people.models[name];const m=THREE.SkeletonUtils.clone(src);m.scale.setScalar(.01);
+ m.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;c.frustumCulled=false;const fix=mm=>{if(mm&&mm.map)mm.map.encoding=THREE.sRGBEncoding;if(mm)mm.needsUpdate=true};Array.isArray(c.material)?c.material.forEach(fix):fix(c.material)}});
+ g.children.forEach(c=>c.visible=false);g.add(m);g.userData.model=m;g.userData.modelName=name;
+ const mixer=new THREE.AnimationMixer(m);const acts={};if(src.animations[0]){acts.idle=mixer.clipAction(src.animations[0]);acts.idle.play();acts.idle.time=Math.random()*acts.idle.getClip().duration}
+ if(people.walk){acts.walk=mixer.clipAction(people.walk);acts.walk.enabled=true;acts.walk.setEffectiveWeight(0);acts.walk.play()}
+ g.userData.mixer=mixer;g.userData.acts=acts;g.userData.moving=0}
+function setMoving(g,amt){const a=g.userData.acts;if(!a||!a.walk)return false;const k=g.userData.moving+=((amt>.05?1:0)-g.userData.moving)*.2;a.walk.setEffectiveWeight(k);if(a.idle)a.idle.setEffectiveWeight(1-k);a.walk.timeScale=.6+amt*.6;return true}
+function onPeopleReady(){if(!active||!W)return;if(mode==='editor')openEditor();else setAvatar(look())}
+function upgradePeople(){personGroups.forEach(attachModel);if(typeof onPeopleReady==='function')onPeopleReady()}
 function person(o){
  const g=new THREE.Group();const skin=M(o.skin,{roughness:.7}),top=M(o.outfit),pants=M(o.pants||0x2a3358),hairM=M(o.hair,{roughness:.85}),shoe=M(0x1b1f33);
  const add=(p,geo,mat,x,y,z)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);p.add(m);return m};
@@ -130,7 +155,7 @@ function person(o){
   if(o.style==='long')add(g,new THREE.BoxGeometry(.3,.38,.09),hairM,0,1.6,-.11);
   if(o.style==='bun')add(g,new THREE.SphereGeometry(.075,12,10),hairM,0,1.9,-.1);}
  if(o.badge)add(g,new THREE.BoxGeometry(.07,.09,.01),M(C.cyan,{emissive:C.cyan,emissiveIntensity:.6}),.11,1.36,.145);
- g.userData.rig={legL,legR,armL,armR};return g;
+ g.userData.rig={legL,legR,armL,armR};g.userData.personOpts=o;personGroups.push(g);if(people.ready)attachModel(g);return g;
 }
 function swing(g,s){const r=g.userData.rig;if(!r)return;r.legL.rotation.x=s;r.legR.rotation.x=-s;r.armL.rotation.x=-s*.8;r.armR.rotation.x=s*.8}
 const lerpAngle=(a,b,t)=>{const d=((b-a+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return a+d*t};
@@ -140,7 +165,7 @@ const SKINS=[0xf6d7c3,0xe8b896,0xc98e66,0xa0663f,0x7a4a2a,0x4e2f1c],HAIRS=[0x1d1
 const STYLES=[['short','Short'],['long','Long'],['bun','Bun'],['none','Shaved']];
 const OUTFITS=[['scrubs','Teal scrubs',0x2fa79a,false],['violet','Violet scrubs',0x7a4fe0,false],['coat','White coat',0x4b5fc4,true],['suit','Navy suit',0x24305e,0x24305e]];
 const look=()=>({skin:SKINS[1],hair:HAIRS[0],style:'short',outfit:'scrubs',...(progress.avatar||{})});
-function avatarFrom(a){const o=OUTFITS.find(x=>x[0]===a.outfit)||OUTFITS[0];return person({skin:a.skin,hair:a.hair,style:a.style,outfit:o[0]==='suit'?0xf2f4ff:o[2],pants:o[3]?0x2a3358:o[2],coat:o[3],tie:o[0]==='suit'?C.violet:0,badge:true})}
+function avatarFrom(a){const o=OUTFITS.find(x=>x[0]===a.outfit)||OUTFITS[0];return person({model:a.model,skin:a.skin,hair:a.hair,style:a.style,outfit:o[0]==='suit'?0xf2f4ff:o[2],pants:o[3]?0x2a3358:o[2],coat:o[3],tie:o[0]==='suit'?C.violet:0,badge:true})}
 
 /* ------------------------------------------------------------------ building a district */
 function makeBuilder(w){
@@ -263,8 +288,8 @@ function updateWalk(dt){
   if(d<(route.length?.35:.15)){nextWaypoint();v.set(0,0)}else{if(d<stuck.best-.02){stuck.best=d;stuck.t=0}else if((stuck.t+=dt)>.8){stopMove();v.set(0,0)}}}
  const amt=Math.min(1,v.length());const p=avatar.position;
  if(amt>.05){v.normalize();const sp=3.6*amt*dt,nx=p.x+v.x*sp,nz=p.z+v.y*sp;if(!hit(nx,p.z))p.x=nx;if(!hit(p.x,nz))p.z=nz;
-  avatar.rotation.y=lerpAngle(avatar.rotation.y,Math.atan2(v.x,v.y),.22);walkPhase+=dt*10*amt;swing(avatar,Math.sin(walkPhase)*.6*amt)}
- else{walkPhase=0;swing(avatar,0)}
+  avatar.rotation.y=lerpAngle(avatar.rotation.y,Math.atan2(v.x,v.y),.22);walkPhase+=dt*10*amt;if(!setMoving(avatar,amt))swing(avatar,Math.sin(walkPhase)*.6*amt)}
+ else{walkPhase=0;if(!setMoving(avatar,0))swing(avatar,0)}
  let best=null,bd=1e9;for(const h of W.hotspots){const d=Math.hypot(p.x-h.x,p.z-h.z);if(d<h.r&&d<bd){bd=d;best=h}}
  if(best!==currentHot){currentHot=best;const el=$('ixPrompt');if(best){el.innerHTML=(coarse?'':'<kbd>E</kbd>')+best.label;el.style.display='block'}else el.style.display='none'}
 }
@@ -304,13 +329,17 @@ function openEditor(){mode='editor';hidePrompt();stopMove();$('ixNova').style.di
  const sw=(el,list,key)=>{el.innerHTML=list.map(c=>`<button style="background:#${c.toString(16).padStart(6,'0')}" data-v="${c}" class="${a[key]===c?'on':''}" aria-label="Colour option"></button>`).join('');el.querySelectorAll('button').forEach(b=>b.onclick=()=>{a[key]=Number(b.dataset.v);el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));setAvatar(a)})};
  const ch=(el,list,key)=>{el.innerHTML=list.map(o=>`<button data-v="${o[0]}" class="${a[key]===o[0]?'on':''}">${o[1]}</button>`).join('');el.querySelectorAll('button').forEach(b=>b.onclick=()=>{a[key]=b.dataset.v;el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));setAvatar(a)})};
  sw($('edSkin'),SKINS,'skin');sw($('edHair'),HAIRS,'hair');ch($('edStyle'),STYLES,'style');ch($('edOutfit'),OUTFITS,'outfit');
+ const real=people.ready;$('edCharRow').style.display=real?'':'none';['edSkin','edStyle','edHair','edOutfit'].forEach(id=>$(id).parentNode.style.display=real?'none':'');
+ if(real){const names=PEOPLE.filter(p=>people.models[p[0]]);if(!a.model||!people.models[a.model])a.model=names[0][0];ch($('edChar'),names,'model');setAvatar(a)}
  $('edDone').onclick=()=>{progress.avatar=a;const n=$('edName').value.trim();progress.name=n||'Future Explorer';store();$('ixEditor').style.display='none';$('ixObj').style.display='';mode='walk';avatar.rotation.y=Math.PI;renderObjectives()};
  avatar.rotation.y=0;}
 $('ixEditBtn').onclick=()=>{if(mode==='walk')openEditor()};
 
 /* ------------------------------------------------------------------ frame */
+const isIn=(o,sc)=>{while(o){if(o===sc)return true;o=o.parent}return false};
 function frame(now){if(!cur)return;const dt=Math.min(.05,(now-(lastNow||now))/1000);lastNow=now;t+=dt;
  if(mode==='walk')updateWalk(dt);
+ for(const g of personGroups){if(g.userData.mixer&&isIn(g,W.scene))g.userData.mixer.update(dt)}
  W.npcs.forEach((n,i)=>{n.position.y=Math.sin(t*1.6+i)*.008;const r=n.userData.rig;if(r)r.armL.rotation.x=Math.sin(t*1.2+i)*.05});
  W.beacon.children[1].scale.setScalar(1+Math.sin(t*3)*.12);W.beacon.children[0].material.opacity=.12+Math.sin(t*2)*.05;W.tapRing.rotation.z+=dt*2;
  if(W.nova.visible){const a=avatar.position;W.nova.position.lerp(tmpV.set(a.x+.75,2.05+Math.sin(t*2.2)*.1,a.z+.35),.08);W.nova.userData.halo.rotation.z+=dt*1.5}
@@ -331,7 +360,7 @@ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updat
 function resetShift(){objIdx=0;stopMove();panel=null;['ixDialog','ixDone','ixPanel','ixEditor'].forEach(id=>$(id).style.display='none');$('ixObj').style.display='';
  const s=cur.start||[0,11.5];avatar.position.set(s[0],0,s[1]);avatar.rotation.y=Math.PI;avatar.visible=true;W.nova.visible=false;W.nova.position.set(s[0]+.75,2,s[1]+.3);
  if(cur.reset)cur.reset(api);}
-function enter(cfg){if(!cfg._w)build(cfg);cur=cfg;W=cfg._w;App.closeMission();document.body.classList.add('in-ix');active=true;
+function enter(cfg){loadPeople();if(!cfg._w)build(cfg);cur=cfg;W=cfg._w;App.closeMission();document.body.classList.add('in-ix');active=true;
  if(avatar&&avatar.parent)avatar.parent.remove(avatar);avatar=avatarFrom(look());W.scene.add(avatar);
  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();$('ixKicker').textContent=cfg.title;$('ixSub').textContent=cfg.subtitle||'Your first shift';
  resetShift();mode='walk';camera.position.set(0,8,19);smoothLook.set(0,1,11);lastNow=0;renderObjectives();

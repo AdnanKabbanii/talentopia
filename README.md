@@ -15,6 +15,13 @@ An original browser-based 3D city experience, intended as the first working proo
 - Career Passport, discovery badges and XP (stored locally on the browser device).
 - Desktop and mobile responsive interface, including a guest welcome flow.
 
+## What's new in V7: cinematic Blender city
+
+- The city view is now a **cinematic fly-through rendered in Blender** (`assets/city/talentopia_city.mp4`, 10 s loop, 1280×720, plus `poster.jpg`): a dusk Talentopia city with the lotus plaza, Talentopia tower and logo, curved elevated ring roads over water, glass towers with lit windows and neon light lines, holographic district signs and moving traffic light-streaks.
+- The interactive Three.js city is still there behind the **◎ 3D map** button. Districts open from the list or "Start a mission".
+- The Blender source scripts (scene build, tuning, animation, encoding) are in `blender/`, so the city can be re-rendered or extended.
+- Realistic people: the engine can load Mixamo characters (`assets/people/*.fbx`). Set `PEOPLE_ENABLED=true` in `interior.js` once the files are added.
+
 ## What's new in V6: every district is a real building + a realistic city
 
 - **All 10 districts are walkable 3D workplaces.** Click any building in the city (or pick it in the list): the camera dives in, a themed "Entering…" portal plays, and you start a shift inside.
