@@ -1,7 +1,7 @@
 /* TALENTOPIA · MedCity walkable 3D experience
    Plaza → street → MedCity General Hospital (sliding doors) → lobby/reception → Anatomy Lab (interactive heart).
    Assets: assets/medcity/medcity.glb (Blender), assets/medcity/heart.glb (BodyParts3D, CC BY-SA 2.1 JP),
-   assets/medcity/sky_2k.hdr (Poly Haven, CC0), assets/people/*.glb (MakeHuman/MPFB, CC0). */
+   assets/medcity/sky_1k.hdr (Poly Haven, CC0), assets/people/*.glb (MakeHuman/MPFB, CC0). */
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
@@ -49,15 +49,19 @@ const colliders = [], floors = [], markers = {}, clickables = [], hospitalMeshes
 let doorL, doorR, doorBase = {}, heart, heartParts = [], env;
 const people = [];  // {root, mixer, acts, kind}
 
-new THREE.RGBELoader(manager).setDataType(THREE.UnsignedByteType).load('assets/medcity/sky_2k.hdr', tex => {
+new THREE.RGBELoader(manager).setDataType(THREE.UnsignedByteType).load('assets/medcity/sky_1k.hdr', tex => {
   const pm = new THREE.PMREMGenerator(renderer); const envMap = pm.fromEquirectangular(tex).texture;
   scene.environment = envMap; tex.mapping = THREE.EquirectangularReflectionMapping; scene.background = tex; pm.dispose();
 });
 
-Promise.all([loadGLB('assets/medcity/medcity.glb'), loadGLB('assets/medcity/heart.glb'),
-             loadGLB('assets/people/receptionist.glb'), loadGLB('assets/people/doctor.glb'),
-             loadGLB('assets/people/visitor_m.glb'), loadGLB('assets/people/visitor_f.glb')])
-.then(([e, h, rec, doc, vm, vf]) => {
+// Background loads (people, heart, the chosen avatar) don't block the Enter button.
+const bgLoader = new THREE.GLTFLoader();
+const bgCache = {};
+const loadBG = url => bgCache[url] || (bgCache[url] = new Promise((res, rej) => bgLoader.load(url, res, undefined, rej)));
+let cityReady = false, heartReady = null;
+
+// Only the district itself (about 4 MB) and the sky (about 1.4 MB) are needed before you can enter.
+loadGLB('assets/medcity/medcity.glb').then(e => {
   env = e.scene; scene.add(env);
   env.traverse(o => {
     if (o.name.startsWith('COL_')) { o.updateWorldMatrix(true, false); colliders.push(new THREE.Box3().setFromObject(o)); o.visible = false; return; }
@@ -73,7 +77,19 @@ Promise.all([loadGLB('assets/medcity/medcity.glb'), loadGLB('assets/medcity/hear
   if (doorL) doorBase.L = doorL.position.clone(); if (doorR) doorBase.R = doorR.position.clone();
   // interior lights (the sun can't reach under the hospital ceiling)
   [[0, 4.5, -30], [-18, 4.5, -30], [18, 4.5, -30], [15, 4.5, -47], [6, 4.5, -47], [24, 4.5, -47]].forEach(p => { const l = new THREE.PointLight(0xfff4e6, 0.9, 22, 2); l.position.set(...p); scene.add(l); });
-  // the heart display
+  cityReady = true;
+  $('loadTxt').textContent = 'City loaded. Choose your avatar and enter.';
+  const g = $('go'); g.disabled = false; g.style.opacity = 1;
+  // then stream in the rest: your avatar first, then the people you'll meet, then the heart
+  loadBG('assets/people/' + chosen + '.glb').catch(() => {});
+  loadBG('assets/people/visitor_m.glb').then(vm => { const w = addPerson(vm, markers.visitor2, 0, 'walker'); w.path = { a: 0, r: 9, cx: 0, cz: 16 }; }).catch(() => {});
+  loadBG('assets/people/receptionist.glb').then(g => addPerson(g, markers.receptionist, 0, 'receptionist')).catch(() => {});
+  loadBG('assets/people/doctor.glb').then(g => addPerson(g, markers.doctor, -Math.PI / 2, 'doctor')).catch(() => {});
+  loadBG('assets/people/visitor_f.glb').then(g => addPerson(g, markers.visitor1, Math.PI, 'visitor')).catch(() => {});
+  heartReady = loadBG('assets/medcity/heart.glb').then(setupHeart);
+}).catch(err => { console.error(err); fail('Loading failed: ' + (err && err.message ? err.message : err)); });
+
+function setupHeart(h) {
   heart = h.scene; const hp = markers.heart || new THREE.Vector3(15, 2.1, -47);
   heart.position.copy(hp); scene.add(heart);
   // orient anatomically: superior vena cava above inferior vena cava (vertical axis = +Y), then centre the model
@@ -84,14 +100,7 @@ Promise.all([loadGLB('assets/medcity/medcity.glb'), loadGLB('assets/medcity/hear
     heart.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(heart); const c = bb.getCenter(new THREE.Vector3());
     heart.position.sub(c).add(hp); pivot.attach(heart); heart = pivot; }
   heart.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.userData.base = o.material.emissive ? o.material.emissive.getHex() : 0; heartParts.push(o); o.castShadow = false; } });
-  // NPCs
-  addPerson(rec, markers.receptionist, 0, 'receptionist');
-  addPerson(doc, markers.doctor, -Math.PI / 2, 'doctor');
-  addPerson(vf, markers.visitor1, Math.PI, 'visitor');
-  const walker = addPerson(vm, markers.visitor2, 0, 'walker'); walker.path = { a: 0, r: 9, cx: 0, cz: 16 };
-  $('loadTxt').textContent = 'City loaded. Choose your avatar and enter.';
-  const g = $('go'); g.disabled = false; g.style.opacity = 1;
-}).catch(err => { console.error(err); fail('Loading failed: ' + (err && err.message ? err.message : err)); });
+}
 
 function addPerson(g, pos, rotY, kind) {
   const root = new THREE.Group(); g.scene.rotation.y = Math.PI; root.add(g.scene);   // MPFB models face -Z after export; make them face +Z
@@ -114,7 +123,7 @@ let player = null, started = false;
 $('go').onclick = () => {
   $('go').disabled = true; $('go').textContent = 'Loading your avatar…';
   progress.avatar3d = chosen; store();
-  loadGLB('assets/people/' + chosen + '.glb').then(g => {
+  loadBG('assets/people/' + chosen + '.glb').then(g => {
     player = addPerson(g, markers.spawn || new THREE.Vector3(0, 0, 34), Math.PI, 'player');
     camYaw = 0; started = true; $('overlay').style.display = 'none'; renderObjectives();
   }).catch(e => fail('Could not load your avatar.'));
@@ -320,6 +329,7 @@ const CHALLENGE = [
 const lab = { seen: new Set(), phase: 'explore', q: 0, first: true, score: 0, sel: null, hov: null };
 const labOrbit = { yaw: 0, pitch: 0.1, dist: 1.9 };
 function openLab() {
+  if (!heart) { toast('Preparing the 3D heart…'); if (heartReady) heartReady.then(() => { if (mode === 'walk') openLab(); }); return; }
   mode = 'lab'; $('prompt').style.display = 'none'; $('tip').style.display = 'none'; paintHospital(false);
   $('lab').style.display = 'flex'; $('obj').style.display = 'none'; $('mini').style.display = 'none';
   renderLab();
