@@ -292,6 +292,7 @@ world.addEventListener('pointermove',e=>{if(window.TalentopiaInterior&&window.Ta
 world.addEventListener('pointerup',e=>{if(!drag)return;if(!drag.moved){const id=pickAt(e);if(id){tip.style.display='none';enterDistrict(id)}}drag=null});
 world.addEventListener('pointerleave',()=>{tip.style.display='none'});
 world.addEventListener('wheel',e=>{e.preventDefault();if(window.TalentopiaInterior&&window.TalentopiaInterior.active)return;desiredZoom=Math.max(.7,Math.min(3.2,desiredZoom+(e.deltaY<0?.1:-.1)))},{passive:false});world.addEventListener('contextmenu',e=>e.preventDefault());
+{const cv=$('cityVideo');const kick=()=>{if(cv&&cv.paused&&!document.body.classList.contains('map3d'))cv.play().catch(()=>{})};document.addEventListener('pointerdown',kick,{passive:true});cv&&cv.addEventListener('canplay',kick);document.addEventListener('visibilitychange',kick)}
 $('mapToggle').onclick=()=>{const on=document.body.classList.toggle('map3d');$('mapToggle').textContent=on?'▶ Cinematic city':'◎ 3D map';tip.style.display='none'};
 let tourIndex=0;$('tourBtn').onclick=()=>{const d=data[tourIndex%data.length];tourIndex++;selectDistrict(d.id,true)};
 window.TalentopiaApp={renderer,progress,store,updateXP,toast,data,showPassport,resetView,closeMission:()=>$('mission').classList.remove('open')};
