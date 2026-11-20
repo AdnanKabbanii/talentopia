@@ -15,6 +15,19 @@ An original browser-based 3D city experience, intended as the first working proo
 - Career Passport, discovery badges and XP (stored locally on the browser device).
 - Desktop and mobile responsive interface, including a guest welcome flow.
 
+## What's new in V8: walkable, realistic MedCity (`medcity.html`)
+
+A genuinely interactive vertical slice, built in Blender and running in the browser:
+
+- **Realistic daylight district:** plaza with fountain, lawns, trees, benches and the Talentopia landmark; Health Avenue with lane markings, crossing, curbs, streetlights and a bus stop; office buildings; **MedCity General Hospital** with glass ground floor, stone facade with window bands, entrance canopy and sign, ambulance bay, roof garden and helipad. Real PBR textures and sky lighting (Poly Haven, CC0).
+- **Realistic people:** 4 avatar choices plus receptionist, doctor and visitors, made with MPFB/MakeHuman (CC0), fully clothed, with idle and walk animations.
+- **Third-person control:** WASD/arrows, Shift to run, drag to look, scroll to zoom, E to interact, M for map/fast travel, touch joystick on phones. Collisions with buildings and furniture; the camera avoids walls.
+- **Click the hospital:** it highlights on hover; clicking walks you to the entrance (route goes around the fountain). The **sliding doors open** and you **walk inside**, no portal.
+- **Inside:** lobby with reception (Maya greets you; study mode is marked as planned), then the **Anatomy Lab** with a **3D heart from BodyParts3D scan data** (29 structures: chambers, valves, papillary muscles, great vessels, coronary arteries). Rotate/zoom, toggle layers, tap structures for explanations, then a 5-question find-the-structure challenge.
+- **Progress:** +150 XP and the *MedCity Heart Anatomy Explorer* badge saved to the Career Passport (survives reloads, shared with the rest of Talentopia).
+- Blender source scripts: `blender/medcity_env.py`, `blender/medcity_heart.py`, `blender/make_character.py`, `blender/make_characters.sh`.
+- Credits: heart © DBCLS BodyParts3D, CC BY-SA 2.1 JP; textures & sky Poly Haven (CC0); people MakeHuman/MPFB (CC0).
+
 ## What's new in V7: cinematic Blender city
 
 - The city view is now a **cinematic fly-through rendered in Blender** (`assets/city/talentopia_city.mp4`, 10 s loop, 1280×720, plus `poster.jpg`): a dusk Talentopia city with the lotus plaza, Talentopia tower and logo, curved elevated ring roads over water, glass towers with lit windows and neon light lines, holographic district signs and moving traffic light-streaks.
