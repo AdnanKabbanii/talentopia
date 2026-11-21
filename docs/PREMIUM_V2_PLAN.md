@@ -138,3 +138,15 @@ Physically staged missions (`world/staging.js`). While a staged task is open, it
   - The other 16 activities and missions still use panels only, though the system is ready for more scenes.
   - The kitchen props are simple shapes, not Blender models.
   - The anatomy hologram is the plain base body: no organs, and it's labelled by region only.
+
+## Milestone E, delivered (feature/premium-city-v2)
+- **Graphics presets** (`world/settings.js`): Auto, High, Balanced and Light.
+  - Each preset sets the resolution cap, shadow map size and range, ambient occlusion, bloom, and the draw distance for pedestrians, cars and staff.
+  - Settings open from the gear in the top bar and from the start screen, and are saved on the device.
+  - Auto picks by device and keeps the automatic fallbacks. A preset chosen explicitly is respected and post effects aren't auto-dropped, though dynamic resolution still applies within its cap.
+- **Accessibility**:
+  - **Reduce motion**: no speed zoom, no body lean, and a still view behind the start screen. The default follows the OS "reduce motion" setting.
+  - **Larger text** and **high-contrast panels** (solid backgrounds, strong outlines).
+  - A character-voice toggle; subtitles are always shown.
+  - A visible keyboard focus ring, and Esc works everywhere.
+- **QA**: an automated in-page suite (`qa/qa.js`) passes 15/15 checks. See `docs/QA_REPORT_V2.md` for results, preset costs, and the four bugs found and fixed: Esc in number fields, sprint foot sliding, the large-text top bar, and counter conversation framing.

@@ -20,6 +20,7 @@ import { AvatarModel, AvatarStudio } from './avatar.js';
 import { Conversations, CAST } from './conversations.js';
 import { Speech } from './speech.js';
 import { Staging } from './staging.js';
+import { PRESETS, loadSettings, saveSettings, resolvePreset, openSettings } from './settings.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -48,8 +49,8 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.15, 2
 camera.position.set(0, 40, 120);
 const hemi = new THREE.HemisphereLight(0xe3ecff, 0x8f8270, 0.55); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0dc, 2.7); sun.castShadow = true;
-const SH = (isTouch || isSmall) ? 70 : 110;
-sun.shadow.mapSize.set((isTouch || isSmall) ? 1024 : 4096, (isTouch || isSmall) ? 1024 : 4096);
+const SH = 110;
+sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 10, far: 420 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; scene.add(sun); scene.add(sun.target);
 const SUN_DIR = new THREE.Vector3(0.55, 1, 0.35).normalize();
@@ -57,18 +58,36 @@ const SUN_DIR = new THREE.Vector3(0.55, 1, 0.35).normalize();
 const roomLights = [new THREE.PointLight(0xfff4e6, 0, 26, 1.6), new THREE.PointLight(0xfff4e6, 0, 26, 1.6)]; roomLights.forEach(l => scene.add(l));
 // post-processing: ground-truth ambient occlusion (desktop), tone mapping + sRGB in the output pass
 let composer = null, gtao = null;
-if (!isTouch && new URLSearchParams(location.search).get('ao') !== '0') {
+function buildComposer(ao, bloom) {
+  if (composer) { composer.renderTarget1.dispose(); composer.renderTarget2.dispose(); composer = null; gtao = null; }
+  if (!ao && !bloom) return;
   const rt = new THREE.WebGLRenderTarget(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio(), { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, rt);   // MSAA preserved in the post chain
   composer.addPass(new RenderPass(scene, camera));
-  gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
-  gtao.output = GTAOPass.OUTPUT.Default; gtao.blendIntensity = 0.9;
-  gtao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
-  gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 12 });
-  composer.addPass(gtao);
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.45, 1.15)); // accents only (threshold > 1)
+  if (ao) {
+    gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+    gtao.output = GTAOPass.OUTPUT.Default; gtao.blendIntensity = 0.9;
+    gtao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
+    gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 12 });
+    composer.addPass(gtao);
+  }
+  if (bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.45, 1.15)); // accents only (threshold > 1)
   composer.addPass(new OutputPass());
 }
+// ------------------------------------------------------------------ graphics presets + accessibility (Milestone E)
+const settings = loadSettings(); let presetName = 'high';
+function applySettings() {
+  presetName = resolvePreset(settings, Q.phone); const p = PRESETS[presetName];
+  Q.maxPR = p.maxPR; Q.pr = Math.min(devicePixelRatio, p.maxPR); renderer.setPixelRatio(Q.pr); Q.slow = 0;
+  Q.people = p.people; Q.cars = p.cars; Q.staff = p.staff; Q.auto = settings.preset === 'auto';
+  if (sun.shadow.mapSize.x !== p.shadow) { sun.shadow.mapSize.set(p.shadow, p.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+  Object.assign(sun.shadow.camera, { left: -p.shadowRange, right: p.shadowRange, top: p.shadowRange, bottom: -p.shadowRange }); sun.shadow.camera.updateProjectionMatrix();
+  const noAO = new URLSearchParams(location.search).get('ao') === '0';
+  buildComposer(p.ao && !noAO, p.bloom); if (composer) composer.setSize(innerWidth, innerHeight);
+  document.body.classList.toggle('large-text', !!settings.largeText); document.body.classList.toggle('hi-contrast', !!settings.contrast);
+  try { if (player) player.noLean = !!settings.reduceMotion; } catch (e) { /* player not created yet */ }
+}
+applySettings();
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
 // ------------------------------------------------------------------ loading
@@ -239,7 +258,7 @@ function WALK() { return SPEED.walk; }
 const RUN = SPEED.sprint;
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase(); if (mode === 'loading') return;
-  if (['input', 'textarea'].includes(document.activeElement.tagName.toLowerCase())) return;
+  if (['input', 'textarea'].includes(document.activeElement.tagName.toLowerCase())) { if (k === 'escape') { document.activeElement.blur(); if (mode === 'talk') conv.end(); else if (mode === 'lab') closeLab(); else ui.closeAll(); } return; }
   keys.add(k); if (k.startsWith('arrow') || k === ' ') e.preventDefault();
   if (k === 'e' && mode === 'walk') { e.preventDefault(); interact(); }
   if (k === 'r' && mode === 'walk') { autoRun = !autoRun; ui.toast(autoRun ? 'Auto-run on (R to stop)' : 'Auto-run off'); }
@@ -338,7 +357,7 @@ const FLY = [
 let flyT = 0, intro = null; const fA = new THREE.Vector3(), fB = new THREE.Vector3(), fC = new THREE.Vector3(), fD = new THREE.Vector3();
 const capEl = document.getElementById('flyCap');
 function flyover(dt) {
-  flyT += dt / 7; const n = FLY.length, i = Math.floor(flyT) % n, j = (i + 1) % n; let u = flyT % 1; u = u * u * (3 - 2 * u);
+  if (!settings.reduceMotion) flyT += dt / 7; const n = FLY.length, i = Math.floor(flyT) % n, j = (i + 1) % n; let u = flyT % 1; u = u * u * (3 - 2 * u);
   fA.fromArray(FLY[i].p).lerp(fB.fromArray(FLY[j].p), u); fC.fromArray(FLY[i].t).lerp(fD.fromArray(FLY[j].t), u);
   camera.position.lerp(fA, 1 - Math.exp(-dt * 2)); camTarget.lerp(fC, 1 - Math.exp(-dt * 2)); camera.lookAt(camTarget);
   if (capEl) { const k = flyT % 1; capEl.textContent = (k < 0.5 ? FLY[i] : FLY[j]).cap; capEl.style.opacity = Math.min(1, Math.abs(k - 0.5) * 4).toFixed(2); }
@@ -361,7 +380,7 @@ function updateCamera(dt) {
   const dist = inside ? Math.min(camDist, 4.2) : camDist, pitch = inside ? Math.max(camPitch, 0.2) : camPitch;
   const want = tmp.set(P.pos.x, P.pos.y + 1.55, P.pos.z);
   camTarget.lerp(want, 1 - Math.exp(-dt * 16));
-  { const fov = 55 + Math.max(0, P.speed - 3.4) * 1.3; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); } }
+  { const fov = 55 + (settings.reduceMotion ? 0 : Math.max(0, P.speed - 3.4) * 1.3); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); } }
   const cp = new THREE.Vector3(camTarget.x + Math.sin(camYaw) * Math.cos(pitch) * dist, camTarget.y + Math.sin(pitch) * dist, camTarget.z + Math.cos(camYaw) * Math.cos(pitch) * dist);
   if (inside) cp.y = Math.min(cp.y, (P.inside.floorH || 0.15) + (P.inside.gfH || 5) - 0.6);
   // keep the camera in front of walls between it and the avatar
@@ -648,7 +667,7 @@ function updatePeople(dt) {
   for (const n of PRO_CHARS) { if (!n.c) continue; const dd = pp ? Math.hypot(pp.x - n.x, pp.z - n.z) : 0; const near = pp && !n.sit && dd < 6;
     // staff are indoors: draw them when you're in their building or close by (keeps the many-avatar cost bounded)
     const sameB = !n.building || (P.inside && P.inside.id === n.building);
-    const vis = !pp || (n.c.isAvatar ? (sameB ? dd < 40 : dd < 16) : dd < (Q.phone ? 45 : 90)); n.c.root.visible = vis; if (!vis) continue;
+    const vis = !pp || (n.c.isAvatar ? (sameB ? dd < 40 * Q.staff : dd < 16 * Q.staff) : dd < 90 * Q.people); n.c.root.visible = vis; if (!vis) continue;
     // reactions: look at you when you come close, a wave the first time you approach
     if (n.c.isAvatar && pp && !(conv.active && conv.active.n === n)) {
       if (dd < 4.5 && sameB) { n.c.lookAt(headPos(player, _ph)); if (!n.greeted && dd < 3.8 && !n.sit) { n.greeted = true; n.c.wave(1.6); n.c.expr.smile = 0.6; setTimeout(() => { if (!(conv.active && conv.active.n === n)) n.c.expr.smile = 0.15; }, 2200); } }
@@ -658,7 +677,7 @@ function updatePeople(dt) {
     const tr = THREE.MathUtils.clamp(d * 4, -2.5, 2.5); n.c.root.rotation.y += tr * dt; n.c.update(dt, 0, Math.abs(d) > 0.3 ? tr : 0); }
   for (const p of peds) {
     if (!p.c) continue;
-    const [x, z] = p.pl.at(p.s); const vis = !pp || Math.hypot(pp.x - x, pp.z - z) < (Q.phone ? 60 : 110); p.c.root.visible = vis;
+    const [x, z] = p.pl.at(p.s); const vis = !pp || Math.hypot(pp.x - x, pp.z - z) < 110 * Q.people; p.c.root.visible = vis;
     // pauses (check phone / look around), and give way to the player or another pedestrian ahead
     let want = p.cruise;
     if (p.pause > 0) { p.pause -= dt; want = 0; if (p.pause <= 0) { p.c.idleClip = 'Idle'; p.nextPause = 40 + Math.random() * 80; } }
@@ -704,7 +723,7 @@ function updateTraffic(dt) {
     c.v += (want - c.v) * (1 - Math.exp(-dt * (want < c.v ? 3 : 1)));
     c.s += c.v * dt;
     c.car.position.set(x, 0.02, z); c.car.rotation.y = h;
-    c.car.visible = !pp || Math.hypot(pp.x - x, pp.z - z) < (Q.phone ? 180 : 320);
+    c.car.visible = !pp || Math.hypot(pp.x - x, pp.z - z) < 320 * Q.cars;
   }
 }
 
@@ -769,6 +788,7 @@ function footsteps(speed) {
   n.buffer = b; const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = P.inside ? 1800 : 900; const g = AC.createGain(); g.gain.value = Math.min(0.22, 0.06 + speed * 0.04);
   n.connect(f).connect(g).connect(AC.destination); n.start(t);
 }
+$('setBtn').onclick = $('setBtn2').onclick = () => openSettings(settings, { isPhone: Q.phone, speech, fpsNow: () => perf.fps, onChange: () => applySettings() });
 $('sndBtn').onclick = () => { sndOn = !sndOn; $('sndBtn').textContent = sndOn ? '🔊' : '🔇'; if (amb) amb.gain.value = 0; if (sndOn) audioStart(); };
 
 // ------------------------------------------------------------------ start
@@ -784,7 +804,7 @@ $('go').onclick = async () => {
   try {
     progress.avatar3d = chosen; store();
     const ac = await avatarReady; studio.close();
-    player = ac ? useCustomAvatar() : await spawnChar(chosen);
+    player = ac ? useCustomAvatar() : await spawnChar(chosen); player.noLean = !!settings.reduceMotion;
     const w = progress.world;
     if (w && w.x > CITY.minX && w.x < CITY.maxX && w.z > CITY.minZ && w.z < CITY.maxZ) { P.pos.set(w.x, w.y || 0, w.z); P.yaw = w.yaw || 0; }
     else { P.pos.set(plaza.spawn.x, plaza.P, plaza.spawn.z); P.yaw = plaza.spawn.ry; }
@@ -825,7 +845,7 @@ function perfTick() {
   const now = performance.now(), d = now - perf.lastT; perf.lastT = now; if (d > 0 && d < 1000) { perf.worst = Math.max(perf.worst, d); }
   perf.n++; if (now - perf.t >= 1000) { perf.fps = perf.n * 1000 / (now - perf.t); perf.ms = (now - perf.t) / perf.n; perf.t = now; perf.n = 0; perf.hist.push(perf.fps); if (perf.hist.length > 60) perf.hist.shift();
     if (mode !== 'loading' && !document.hidden) {
-      if (composer && perf.fps < 34) { lowFps++; if (lowFps > 4) { composer = null; lowFps = 0; ui.toast('Reduced effects for smoother movement'); } } else lowFps = 0;
+      if (composer && Q.auto && perf.fps < 34) { lowFps++; if (lowFps > 4) { composer = null; lowFps = 0; ui.toast('Reduced effects for smoother movement'); } } else lowFps = 0;
       if (perf.fps < 28) { Q.slow++; if (Q.slow >= 3 && Q.pr > 0.85) { Q.pr = Math.max(0.85, Q.pr - 0.15); renderer.setPixelRatio(Q.pr); if (composer) composer.setPixelRatio ? composer.setPixelRatio(Q.pr) : 0; Q.slow = 0; } }
       else if (perf.fps > 50 && Q.pr < Math.min(devicePixelRatio, Q.maxPR)) { Q.slow--; if (Q.slow <= -5) { Q.pr = Math.min(Math.min(devicePixelRatio, Q.maxPR), Q.pr + 0.1); renderer.setPixelRatio(Q.pr); Q.slow = 0; } }
       else Q.slow = 0; }
@@ -836,7 +856,7 @@ if (dbg) { dbg.style.cssText = 'position:fixed;left:8px;top:110px;z-index:30;bac
 function gpuName() { try { const gl = renderer.getContext(); const e = gl.getExtension('WEBGL_debug_renderer_info'); return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); } catch (e) { return '?'; } }
 function report() {
   const i = renderer.info, avg = perf.hist.length ? perf.hist.reduce((a, b) => a + b, 0) / perf.hist.length : 0, min = perf.hist.length ? Math.min(...perf.hist) : 0;
-  return `Talentopia device report\nfps now ${perf.fps.toFixed(0)} · avg ${avg.toFixed(0)} · min ${min.toFixed(0)} (last ${perf.hist.length}s)\nworst frame ${perf.worst.toFixed(0)} ms\ndraw calls ${i.render.calls} · triangles ${(i.render.triangles / 1000).toFixed(0)}k\ntextures ${i.memory.textures} · geometries ${i.memory.geometries}\nscreen ${innerWidth}x${innerHeight} @ pixel ratio ${Q.pr.toFixed(2)} (device ${devicePixelRatio})\nAO ${composer ? 'on' : 'off'} · phone mode ${Q.phone}\ncity ready in ${perf.readyAt ? ((perf.readyAt - perf.startAt) / 1000).toFixed(1) + ' s' : '…'}\nGPU ${gpuName()}\n${navigator.userAgent.slice(0, 120)}`;
+  return `Talentopia device report\nfps now ${perf.fps.toFixed(0)} · avg ${avg.toFixed(0)} · min ${min.toFixed(0)} (last ${perf.hist.length}s)\nworst frame ${perf.worst.toFixed(0)} ms\ndraw calls ${i.render.calls} · triangles ${(i.render.triangles / 1000).toFixed(0)}k\ntextures ${i.memory.textures} · geometries ${i.memory.geometries}\nscreen ${innerWidth}x${innerHeight} @ pixel ratio ${Q.pr.toFixed(2)} (device ${devicePixelRatio})\npreset ${presetName}${Q.auto ? ' (auto)' : ''} · AO ${gtao ? 'on' : 'off'} · post ${composer ? 'on' : 'off'} · phone mode ${Q.phone}\ncity ready in ${perf.readyAt ? ((perf.readyAt - perf.startAt) / 1000).toFixed(1) + ' s' : '…'}\nGPU ${gpuName()}\n${navigator.userAgent.slice(0, 120)}`;
 }
 function drawDebug() { if (dbg.dataset.min) { dbg.innerHTML = `${perf.fps.toFixed(0)} fps · tap`; return; } dbg.innerHTML = report().replace(/</g, '&lt;') + '\n<button id="dbgCopy" style="margin-top:6px;padding:6px 10px;border-radius:8px;border:0;background:#8056F6;color:#fff;font:inherit">Copy report</button>';
   dbg.querySelector('#dbgCopy').onclick = () => { const t = report(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => ui.toast('Report copied, paste it to Claude')).catch(() => { prompt('Copy this report:', t); }); }; }
@@ -844,4 +864,4 @@ function frame() { perfTick(); step(); requestAnimationFrame(frame); }
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, settings, applySettings, get preset() { return presetName; }, perf, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };

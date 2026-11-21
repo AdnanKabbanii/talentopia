@@ -179,7 +179,7 @@ export function runActivity(id, H, cb) {
       const o = shell(`<div style="margin:6px 0 10px"><b>Step ${i + 1}/${a.steps.length}.</b> ${s.q}</div><div class="row"><input type="number" step="any" id="actNum" placeholder="${esc(s.unit)}"> <span style="font-weight:700">${esc(s.unit)}</span><button class="primary" data-ok>Check</button>${leave}</div>`, msg);
       const inp = o.querySelector('#actNum'); setTimeout(() => inp.focus(), 30);
       const go = () => { const v = parseFloat(inp.value); if (isNaN(v)) return; if (Math.abs(v - s.answer) <= (s.tol || 0.5)) { i++; tries = 0; if (i >= a.steps.length) finish(); else render(fb(true, `✓ Correct: ${s.answer.toLocaleString()} ${esc(s.unit)}.`)); } else { mistakes++; tries++; render(fb(false, tries > 1 ? `Hint: ${s.hint}` : 'Not quite. Try again.')); } };
-      o.querySelector('[data-ok]').onclick = go; inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') go(); }; wire(o);
+      o.querySelector('[data-ok]').onclick = go; inp.onkeydown = e => { if (e.key !== 'Escape') e.stopPropagation(); if (e.key === 'Enter') go(); }; wire(o);
     };
     render();
   }

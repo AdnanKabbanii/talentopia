@@ -80,7 +80,7 @@ export class Character {
     // measure each gait's true ground speed and contact phase on this skeleton
     this.gaits = [];
     // CAL: residual correction from the in-browser planted-foot slip test (walk 1.8, jog 3.2, sprint 6.0 m/s)
-    const CAL = { Stroll: 1.0, WalkG: 1.02, JogG: 0.96, RunG: 0.92 };
+    const CAL = { Stroll: 1.0, WalkG: 1.02, JogG: 0.96, RunG: 0.966 }; // RunG re-tuned in Milestone E QA (deterministic 60 Hz slip test)
     for (const [name] of GAITS) if (this.acts[name]) { const m = this.measure(name); this.acts[name].timeScale = 0; this.gaits.push({ name, speed: m.speed * CAL[name], offset: m.offset }); }
     this.gaits.sort((a, b) => a.speed - b.speed);
     this.speeds = { Walk: this.gaitSpeed('WalkG'), Jog: this.gaitSpeed('JogG'), Sprint: this.gaitSpeed('RunG'), Stroll: this.gaitSpeed('Stroll') };
@@ -155,7 +155,7 @@ export class Character {
     const k = 1 - Math.exp(-dt / (this.blend / 3));
     for (const n in this.acts) { this.w[n] += (tw[n] - this.w[n]) * k; this.acts[n].setEffectiveWeight(this.w[n]); }
     this.mixer.update(dt);
-    const targetLean = THREE.MathUtils.clamp(-turn * speed * 0.01, -0.14, 0.14);
+    const targetLean = this.noLean ? 0 : THREE.MathUtils.clamp(-turn * speed * 0.01, -0.14, 0.14);
     this.lean += (targetLean - this.lean) * Math.min(1, dt * 6); this.leanG.rotation.z = this.lean;
     this.procedural(dt);
     this.faceLife(dt);

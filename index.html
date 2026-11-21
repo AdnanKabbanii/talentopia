@@ -51,6 +51,18 @@ button{font:inherit;cursor:pointer;border:0;border-radius:12px}
 #dialog.staged,#dialog.staged.wide{left:auto;right:16px;top:76px;bottom:auto;transform:none;width:min(440px,40vw);max-height:calc(100vh - 96px);overflow:auto}
 body.staged #obj,body.staged #mini,body.staged #prompt,body.staged #joy,body.staged #eBtn,body.staged #runBtn{opacity:0;pointer-events:none;transition:opacity .3s}
 @media (max-width:760px){#dialog.staged,#dialog.staged.wide{left:0;right:0;top:auto;bottom:0;width:auto;max-height:46vh;border-radius:18px 18px 0 0}}
+#settings{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:rgba(17,24,39,.35);padding:16px}
+.set-card{width:min(640px,96vw);max-height:90vh;overflow:auto;padding:18px 20px}.set-head{display:flex;justify-content:space-between;align-items:center}.set-head h3{margin:0}
+.set-x{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-weight:700}
+.set-card h4{margin:14px 0 8px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#6b55c9}
+.set-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.set-opt{text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.set-opt b{font-size:14px}.set-opt span{font-size:12px;color:var(--muted);line-height:1.35}.set-opt.on{border-color:var(--violet);box-shadow:0 0 0 2px rgba(141,112,255,.25)}
+.set-tog{display:flex;gap:10px;align-items:flex-start;padding:8px 2px;cursor:pointer}.set-tog input{width:18px;height:18px;margin-top:2px;accent-color:#8D70FF}.set-tog b{display:block;font-size:14px}.set-tog em{font-style:normal;font-size:12px;color:var(--muted)}
+.set-note{font-size:12px;color:var(--muted);margin-top:8px}.linkbtn{background:none;border:0;color:#6b55c9;font-weight:700;padding:6px 0;margin-top:6px;cursor:pointer;text-decoration:underline}
+@media (max-width:760px){.set-grid{grid-template-columns:1fr}}
+body.large-text #dialog p,body.large-text #talk .tk-line{font-size:19px}body.large-text #dialog,body.large-text #talk .tk-opts button,body.large-text #dialog .opts button,body.large-text #obj{font-size:115%}body.large-text #toast{font-size:17px}
+body.hi-contrast .glass{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;border:2px solid #111827}body.hi-contrast #talk .tk-line span{color:rgba(17,24,39,.55)}body.hi-contrast #talk .tk-line span.on{color:#000}
+:focus-visible{outline:3px solid #8D70FF;outline-offset:2px}
 #talk{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);width:min(640px,94vw);padding:14px 18px 14px;z-index:8;display:none}
 #talk .tk-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 #talk .tk-head b{font-size:15px;color:var(--ink);margin-right:8px}#talk .tk-head span{font-size:11px;font-weight:800;letter-spacing:1px;color:#6b55c9;text-transform:uppercase}
@@ -156,6 +168,7 @@ body.intro #top,body.intro #where,body.intro #obj,body.intro #mini,body.intro #h
   <div class="chip glass" id="xp">✦ 0 XP</div>
   <div class="chip glass btn" id="passBtn">Career Passport</div>
   <div class="chip glass btn" id="mapBtn">City map <small style="opacity:.6">(M)</small></div>
+  <div class="chip glass btn" id="setBtn" title="Settings" aria-label="Settings">⚙︎</div>
   <div class="chip glass btn" id="sndBtn" title="Sound">🔊</div>
 </div>
 <div id="where" class="glass"><span class="dot"></span><span id="whereTxt">Central Plaza</span></div>
@@ -187,9 +200,11 @@ body.intro #top,body.intro #where,body.intro #obj,body.intro #mini,body.intro #h
     <div class="loadbar"><span id="loadBar"></span></div>
     <div class="row"><button class="primary" id="go" disabled>Preparing the city…</button><span id="loadTxt" style="font-size:13px;color:#5d6580">Loading…</span></div>
     <div id="err"></div>
+    <button class="linkbtn" id="setBtn2">⚙︎ Graphics &amp; accessibility settings</button>
     <div class="keys"><kbd>W A S D</kbd> walk · <kbd>Shift</kbd> run · drag mouse to look · <kbd>E</kbd> enter / interact · <kbd>M</kbd> map &amp; fast travel · <kbd>Esc</kbd> close · click any building to walk to it. On phones: left joystick to walk, drag to look.</div>
   </div>
 </div>
+<div id="settings"></div>
 <script type="module" src="world/main.js"></script>
 </body>
 </html>
