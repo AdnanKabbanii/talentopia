@@ -2,7 +2,7 @@
 
 **Live:** https://talentopia.vercel.app · **QR / 60-second mission:** https://talentopia.vercel.app/?qr=1 (QR images: `talentopia-qr.png`, `talentopia-qr.svg`)
 
-Hosting: Vercel project `talentopia` (Adnan's projects), deployed from this GitHub repo. Every push to `main` redeploys automatically.
+Hosting: Vercel project `talentopia` (Adnan's projects), deployed from this GitHub repo. Pushes to `main` are deployed with a manual Vercel deployment.
 
 An original browser-based 3D city experience, intended as the first working proof of concept for a virtual career-learning platform.
 
@@ -14,6 +14,16 @@ An original browser-based 3D city experience, intended as the first working proo
 - Medical anatomy study interactions, a working finance loan repayment slider, and a working marketing budget allocator.
 - Career Passport, discovery badges and XP (stored locally on the browser device).
 - Desktop and mobile responsive interface, including a guest welcome flow.
+
+## V9: one connected Talentopia city (`index.html`, `world/`)
+
+The main experience is now a single continuous 3D city. You spawn at Central Plaza and can walk (or click-to-walk) to every district without leaving the world. The old homepage is kept as `legacy.html`; `medcity.html` now redirects into the hospital inside the city.
+
+- **City layout (`world/city.js`, `world/districts.js`)**: a street grid with roads, lane markings, crosswalks, raised sidewalks, street trees and lamps. A raised Central Plaza with ramps, the Talentopia Tower, a fountain, lawns and a café. An elevated monorail loop with a station. Ten districts, each with several recognisable buildings and signage: MedCity (hospital, pharmacy, dental clinic, medical school, research lab), Capital Bay (classical central bank, finance tower, fintech hub, investment centre), Creative Quarter (agency, media studio with animated screens, fashion house, design school), Forge & Form (engineering studio, construction site with crane, factory, architects), Code Nexus (software HQ, robotics lab, cyber-security, AI data centre), Taste District (restaurant & culinary school, hotel, café row, pastry school), Planet Lab (research institute, biodomes, lake, chemical pilot plant, solar + wind), Civic Square (courthouse, law firm, teaching centre, institute), Market Street (store, shop row, business centre, logistics hub) and Skyport (terminal, control tower, hangars, runway with aircraft, mobility centre, transit hub).
+- **Building entry (`world/kit.js` `shell()`, `world/interiors.js`)**: each district's featured building has a real walk-in ground floor in the same world, with sliding doors, furniture, a professional NPC and a mission station. Every named building has a click target; featured ones show "Press E to enter".
+- **Avatar locomotion (`world/characters.js`)**: MakeHuman/MPFB characters (CC0) with Quaternius Universal Animation Library clips (CC0), retargeted in Blender by `blender/retarget.py` (A-pose/T-pose reference alignment + world-space rotation transfer). A velocity-driven state machine blends Idle, Walk and Jog. Leg phase is driven by distance travelled, using strides calibrated in the browser, so planted feet don't slide (measured at <1% of body speed when walking). The avatar turns at a human rate and slows into sharp turns. Movement is frame-rate independent. Walk is about 1.45 m/s and run 4.5 m/s.
+- **Systems (`world/main.js`)**: spatial-hash collisions, ground heights with ramps and steps, a camera that follows and avoids walls, sidewalk/crosswalk navigation for click-to-walk, pedestrians on sidewalk loops (pausing, giving way), traffic on lane loops (braking for cars and people), automatic doors, a guided route, a minimap, a full map with fast travel, WebAudio ambience and footsteps, and saved position + progress (`localStorage`).
+- **Missions (`world/ui.js`)**: the Heart Lab in the hospital, a bank loan-affordability calculator, and two-to-three-step professional challenges in the other eight featured buildings. Each awards XP and a Passport badge.
 
 ## What's new in V8: walkable, realistic MedCity (`medcity.html`)
 

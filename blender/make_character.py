@@ -8,7 +8,7 @@ for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)
 from bl_ext.blender_org.mpfb.services import HumanService, LocationService
 U = LocationService.get_user_data()
 def f(kind, name, ext): return os.path.join(U, kind, name, name + ext)
-macro = {"gender": gender, "age": age, "muscle": 0.5, "weight": 0.45, "proportions": 0.6, "height": 0.55 if gender > .5 else 0.45,
+macro = {"gender": gender, "age": age, "muscle": 0.5, "weight": 0.45, "proportions": 0.6, "height": float(os.environ.get("HEIGHT", "0.55" if gender > .5 else "0.45")),
          "cupsize": 0.5, "firmness": 0.5, "race": {"african": afr, "asian": asi, "caucasian": cau}}
 base = HumanService.create_human(macro_detail_dict=macro, scale=0.1)
 HumanService.add_builtin_rig(base, "game_engine")
