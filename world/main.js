@@ -28,7 +28,9 @@ const store = () => { try { localStorage.setItem(KEY, JSON.stringify(progress));
 // ------------------------------------------------------------------ renderer / scene
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, isSmall ? 1.5 : 1.75));
+// phones: cap resolution; dynamic resolution below lowers it further if the frame rate drops
+const Q = { phone: isTouch || isSmall, maxPR: (isTouch || isSmall) ? 1.25 : 1.75, pr: 0, slow: 0 };
+Q.pr = Math.min(devicePixelRatio, Q.maxPR); renderer.setPixelRatio(Q.pr);
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
@@ -40,8 +42,9 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.15, 2
 camera.position.set(0, 40, 120);
 const hemi = new THREE.HemisphereLight(0xe3ecff, 0x8f8270, 0.55); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0dc, 2.7); sun.castShadow = true;
-sun.shadow.mapSize.set(isSmall ? 2048 : 4096, isSmall ? 2048 : 4096);
-Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 10, far: 420 });
+const SH = (isTouch || isSmall) ? 70 : 110;
+sun.shadow.mapSize.set((isTouch || isSmall) ? 1024 : 4096, (isTouch || isSmall) ? 1024 : 4096);
+Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 10, far: 420 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; scene.add(sun); scene.add(sun.target);
 const SUN_DIR = new THREE.Vector3(0.55, 1, 0.35).normalize();
 // two pooled interior lights that follow the nearest interior (keeps the light count fixed, no shader recompiles)
@@ -302,7 +305,13 @@ function updateCamera(dt) {
 }
 // mouse / touch look
 let drag = null;
-canvas.addEventListener('pointerdown', e => { if (mode === 'loading') return; canvas.focus(); drag = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: 0 }; canvas.setPointerCapture(e.pointerId); audioStart(); });
+// two-finger pinch zooms the camera (phones)
+const touches = new Map(); let pinch0 = 0, dist0 = 0;
+canvas.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') { touches.set(e.pointerId, [e.clientX, e.clientY]); if (touches.size === 2) { const [a, b] = [...touches.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); dist0 = mode === 'lab' ? labOrbit.dist : camDist; drag = null; } } }, true);
+canvas.addEventListener('pointermove', e => { if (!touches.has(e.pointerId)) return; touches.set(e.pointerId, [e.clientX, e.clientY]); if (touches.size === 2 && pinch0) { const [a, b] = [...touches.values()]; const k = pinch0 / Math.max(20, Math.hypot(a[0] - b[0], a[1] - b[1]));
+  if (mode === 'lab') labOrbit.dist = THREE.MathUtils.clamp(dist0 * k, 0.6, 4); else camDist = THREE.MathUtils.clamp(dist0 * k, 2.2, 16); drag = null; } }, true);
+const endTouch = e => { touches.delete(e.pointerId); if (touches.size < 2) pinch0 = 0; }; canvas.addEventListener('pointerup', endTouch, true); canvas.addEventListener('pointercancel', endTouch, true);
+canvas.addEventListener('pointerdown', e => { if (mode === 'loading' || touches.size > 1) return; canvas.focus(); drag = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: 0 }; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} audioStart(); });
 canvas.addEventListener('pointermove', e => {
   if (drag && drag.id === e.pointerId) {
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved += Math.abs(dx) + Math.abs(dy); drag.x = e.clientX; drag.y = e.clientY;
@@ -317,7 +326,7 @@ if (isTouch) {
   $('joy').style.display = 'block'; $('eBtn').style.display = 'block'; $('runBtn').style.display = 'block';
   const J = $('joy'), K = J.querySelector('i'); let jid = null;
   const setJ = e => { const r = J.getBoundingClientRect(); let x = (e.clientX - r.left - 60) / 50, y = (e.clientY - r.top - 60) / 50; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } joy.x = x; joy.y = y; K.style.transform = `translate(${x * 35}px,${y * 35}px)`; };
-  J.addEventListener('pointerdown', e => { jid = e.pointerId; J.setPointerCapture(jid); joy.on = true; P.route = []; setJ(e); audioStart(); });
+  J.addEventListener('pointerdown', e => { jid = e.pointerId; try { J.setPointerCapture(jid); } catch (err) {} joy.on = true; P.route = []; setJ(e); audioStart(); });
   J.addEventListener('pointermove', e => { if (e.pointerId === jid) setJ(e); });
   const end = () => { jid = null; joy.on = false; joy.x = joy.y = 0; K.style.transform = ''; }; J.addEventListener('pointerup', end); J.addEventListener('pointercancel', end);
   $('eBtn').onclick = () => interact(); $('runBtn').onclick = () => { runToggle = !runToggle; $('runBtn').classList.toggle('on', runToggle); };
@@ -491,12 +500,12 @@ function roundLoop(pts, r) { // round the corners of a rectangle loop
 function updatePeople(dt) {
   const pp = player ? player.root.position : null;
   for (const n of PRO_CHARS) { if (!n.c) continue; const near = pp && !n.sit && Math.hypot(pp.x - n.x, pp.z - n.z) < 6;
-    const vis = !pp || Math.hypot(pp.x - n.x, pp.z - n.z) < 90; n.c.root.visible = vis; if (!vis) continue;
+    const vis = !pp || Math.hypot(pp.x - n.x, pp.z - n.z) < (Q.phone ? 45 : 90); n.c.root.visible = vis; if (!vis) continue;
     const want = near ? Math.atan2(pp.x - n.x, pp.z - n.z) : n.baseRy; const d = angDiff(n.c.root.rotation.y, want);
     const tr = THREE.MathUtils.clamp(d * 4, -2.5, 2.5); n.c.root.rotation.y += tr * dt; n.c.update(dt, 0, Math.abs(d) > 0.3 ? tr : 0); }
   for (const p of peds) {
     if (!p.c) continue;
-    const [x, z] = p.pl.at(p.s); const vis = !pp || Math.hypot(pp.x - x, pp.z - z) < 110; p.c.root.visible = vis;
+    const [x, z] = p.pl.at(p.s); const vis = !pp || Math.hypot(pp.x - x, pp.z - z) < (Q.phone ? 60 : 110); p.c.root.visible = vis;
     // pauses (check phone / look around), and give way to the player or another pedestrian ahead
     let want = p.cruise;
     if (p.pause > 0) { p.pause -= dt; want = 0; if (p.pause <= 0) { p.c.idleClip = 'Idle'; p.nextPause = 40 + Math.random() * 80; } }
@@ -542,7 +551,7 @@ function updateTraffic(dt) {
     c.v += (want - c.v) * (1 - Math.exp(-dt * (want < c.v ? 3 : 1)));
     c.s += c.v * dt;
     c.car.position.set(x, 0.02, z); c.car.rotation.y = h;
-    c.car.visible = !pp || Math.hypot(pp.x - x, pp.z - z) < 320;
+    c.car.visible = !pp || Math.hypot(pp.x - x, pp.z - z) < (Q.phone ? 180 : 320);
   }
 }
 
@@ -613,7 +622,7 @@ $('sndBtn').onclick = () => { sndOn = !sndOn; $('sndBtn').textContent = sndOn ? 
 let readyCount = 0;
 function checkReady() {
   if (!loadParts.sky || !hospital.ready) return;
-  $('loadTxt').textContent = 'City ready. Choose your avatar and enter.'; const g = $('go'); g.disabled = false; g.textContent = 'Enter Talentopia →';
+  perf.readyAt = performance.now(); $('loadTxt').textContent = 'City ready. Choose your avatar and enter.'; const g = $('go'); g.disabled = false; g.textContent = 'Enter Talentopia →';
   loadModel(chosen).catch(() => {}); // prefetch the chosen avatar
   setupHeart();
 }
@@ -652,10 +661,31 @@ function step(dtOverride) {
   if (player) ui.drawMini(mapData());
   if (composer) composer.render(dt); else renderer.render(scene, camera);
   frames++; fpsT += dt; if (fpsT > 1) { window.__fps = frames / fpsT; frames = 0; fpsT = 0;
-    if (composer && !document.hidden && window.__fps < 32) { lowFps = (lowFps || 0) + 1; if (lowFps > 4) { composer = null; ui.toast('Reduced effects for smoother movement'); } } else lowFps = 0; }
+  }
 }
-function frame() { step(); requestAnimationFrame(frame); }
+// ---------------------------------------------------------------- real frame timing, dynamic resolution, diagnostics overlay
+const perf = { t: performance.now(), n: 0, fps: 0, ms: 0, worst: 0, readyAt: 0, enterAt: 0, startAt: performance.now(), hist: [] };
+function perfTick() {
+  const now = performance.now(), d = now - perf.lastT; perf.lastT = now; if (d > 0 && d < 1000) { perf.worst = Math.max(perf.worst, d); }
+  perf.n++; if (now - perf.t >= 1000) { perf.fps = perf.n * 1000 / (now - perf.t); perf.ms = (now - perf.t) / perf.n; perf.t = now; perf.n = 0; perf.hist.push(perf.fps); if (perf.hist.length > 60) perf.hist.shift();
+    if (mode !== 'loading' && !document.hidden) {
+      if (composer && perf.fps < 34) { lowFps++; if (lowFps > 4) { composer = null; lowFps = 0; ui.toast('Reduced effects for smoother movement'); } } else lowFps = 0;
+      if (perf.fps < 28) { Q.slow++; if (Q.slow >= 3 && Q.pr > 0.85) { Q.pr = Math.max(0.85, Q.pr - 0.15); renderer.setPixelRatio(Q.pr); if (composer) composer.setPixelRatio ? composer.setPixelRatio(Q.pr) : 0; Q.slow = 0; } }
+      else if (perf.fps > 50 && Q.pr < Math.min(devicePixelRatio, Q.maxPR)) { Q.slow--; if (Q.slow <= -5) { Q.pr = Math.min(Math.min(devicePixelRatio, Q.maxPR), Q.pr + 0.1); renderer.setPixelRatio(Q.pr); Q.slow = 0; } }
+      else Q.slow = 0; }
+    if (dbg) drawDebug(); perf.worst = 0; }
+}
+const dbg = /[?&]debug=1/.test(location.search) ? document.createElement('div') : null;
+if (dbg) { dbg.style.cssText = 'position:fixed;left:8px;top:110px;z-index:30;background:rgba(16,26,50,.85);color:#F5F7FB;font:10px/1.4 ui-monospace,Menlo,monospace;padding:6px 8px;border-radius:10px;max-width:230px;white-space:pre-wrap;pointer-events:auto'; document.body.appendChild(dbg); dbg.addEventListener('click', e => { if (e.target.id === 'dbgCopy') return; if (dbg.dataset.min) delete dbg.dataset.min; else dbg.dataset.min = '1'; drawDebug(); }); }
+function gpuName() { try { const gl = renderer.getContext(); const e = gl.getExtension('WEBGL_debug_renderer_info'); return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); } catch (e) { return '?'; } }
+function report() {
+  const i = renderer.info, avg = perf.hist.length ? perf.hist.reduce((a, b) => a + b, 0) / perf.hist.length : 0, min = perf.hist.length ? Math.min(...perf.hist) : 0;
+  return `Talentopia device report\nfps now ${perf.fps.toFixed(0)} · avg ${avg.toFixed(0)} · min ${min.toFixed(0)} (last ${perf.hist.length}s)\nworst frame ${perf.worst.toFixed(0)} ms\ndraw calls ${i.render.calls} · triangles ${(i.render.triangles / 1000).toFixed(0)}k\ntextures ${i.memory.textures} · geometries ${i.memory.geometries}\nscreen ${innerWidth}x${innerHeight} @ pixel ratio ${Q.pr.toFixed(2)} (device ${devicePixelRatio})\nAO ${composer ? 'on' : 'off'} · phone mode ${Q.phone}\ncity ready in ${perf.readyAt ? ((perf.readyAt - perf.startAt) / 1000).toFixed(1) + ' s' : '…'}\nGPU ${gpuName()}\n${navigator.userAgent.slice(0, 120)}`;
+}
+function drawDebug() { if (dbg.dataset.min) { dbg.innerHTML = `${perf.fps.toFixed(0)} fps · tap`; return; } dbg.innerHTML = report().replace(/</g, '&lt;') + '\n<button id="dbgCopy" style="margin-top:6px;padding:6px 10px;border-radius:8px;border:0;background:#8056F6;color:#fff;font:inherit">Copy report</button>';
+  dbg.querySelector('#dbgCopy').onclick = () => { const t = report(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => ui.toast('Report copied, paste it to Claude')).catch(() => { prompt('Copy this report:', t); }); }; }
+function frame() { perfTick(); step(); requestAnimationFrame(frame); }
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
