@@ -1,5 +1,7 @@
 // HUD, dialogs, missions, Career Passport, city map + minimap, Heart Lab panel.
 import { XS, ZS, X0, X1, Z0, Z1, CITY } from './city.js';
+import { runActivity, ACTIVITIES } from './activities.js';
+import { CAREERS } from './interiors.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -22,7 +24,7 @@ export function createUI({ progress, store, onTravel }) {
   api.setWhere = (name, color) => { $('whereTxt').textContent = name; $('where').querySelector('.dot').style.background = color; };
   let tt; api.toast = (msg) => { const t = $('toast'); t.innerHTML = msg; t.style.display = 'block'; clearTimeout(tt); tt = setTimeout(() => t.style.display = 'none', 3200); };
   api.dialog = (who, html, opts = [], note = '') => {
-    const d = $('dialog'); d.style.display = 'block'; setMode('dialog');
+    const d = $('dialog'); d.style.display = 'block'; d.classList.remove('wide'); setMode('dialog');
     d.innerHTML = `<div class="who">${esc(who)}</div><p>${html}</p><div class="opts"></div>${note ? `<div class="note">${note}</div>` : ''}`;
     const o = d.querySelector('.opts'); opts.forEach(op => { const b = document.createElement('button'); b.innerHTML = op.label; b.onclick = () => op.fn(b); o.appendChild(b); });
     return d;
@@ -32,11 +34,26 @@ export function createUI({ progress, store, onTravel }) {
   api.renderObjectives = (OBJ, idx) => {
     $('objList').innerHTML = OBJ.map((o, i) => `<li class="${i < idx ? 'ok' : i === idx ? 'now' : ''}"><b>${i < idx ? '✓' : i + 1}</b><span>${esc(o.t)}</span></li>`).join('');
   };
+  // which challenges belong to which building (main mission + hands-on activities)
+  const BUILDINGS = [['hospital', 'MedCity General Hospital', ['med_heart']], ['bank', 'Talentopia Central Bank', ['m_bank']], ['agency', 'Pulse Advertising Agency', ['m_agency']],
+    ['engineering', 'Atlas Engineering & Architecture', ['m_engineering']], ['software', 'Nexus Software HQ', ['m_software']], ['kitchen', 'Atelier Restaurant & Culinary School', ['m_kitchen']],
+    ['store', 'Market Hall Store', ['m_store']], ['court', 'Talentopia Courthouse', ['m_court']], ['research', 'Planet Research Institute', ['m_research']], ['terminal', 'Skyport Terminal', ['m_terminal']]];
+  for (const b of BUILDINGS) for (const [k, a] of Object.entries(ACTIVITIES)) if (a.building === b[0]) b[2].push('a_' + k);
+  api.buildingProgress = (id) => { const b = BUILDINGS.find(x => x[0] === id); if (!b) return [0, 0]; return [b[2].filter(k => progress.flags && progress.flags[k]).length, b[2].length]; };
   $('passBtn').onclick = () => {
     const s = progress.shifts || {};
-    const badges = Object.values(s).map(b => `<div style="padding:8px 10px;border:1px solid #e3e6f1;border-radius:10px;margin:4px 0;background:#fff">${esc(b.icon || '✦')} <b>${esc(b.badge)}</b> · ${b.score}/${b.max}</div>`).join('') || '<div style="color:#5d6580">No badges yet. Enter a featured building and complete its challenge.</div>';
-    api.dialog('Career Passport', `<b>${progress.xp || 0} XP</b> earned in Talentopia.${badges}`, [{ label: 'Close', fn: api.closeDialog }], 'Discovery badges from educational simulations, not qualifications. Saved on this device.');
+    const rows = BUILDINGS.map(([id, name, keys]) => { const n = keys.filter(k => progress.flags && progress.flags[k]).length; const pct = Math.round(n / keys.length * 100);
+      const bs = keys.filter(k => s[k]).map(k => `<span class="pb" title="${esc(s[k].badge)}">${esc(s[k].icon || '✦')} ${esc(s[k].badge)}</span>`).join('');
+      return `<div class="pp"><div class="row" style="justify-content:space-between"><b>${esc(name)}</b><span>${n}/${keys.length}</span></div><div class="bar"><span style="width:${pct}%"></span></div>${bs ? `<div class="pbs">${bs}</div>` : ''}</div>`; }).join('');
+    const d = api.dialog('Career Passport', `<b>${progress.xp || 0} XP</b> · ${Object.keys(s).length} badges earned across Talentopia.<div class="ppl">${rows}</div>`, [{ label: 'Close', fn: api.closeDialog }], 'Discovery badges from educational simulations, not qualifications. Saved on this device.');
+    d.classList.add('wide');
   };
+  api.careers = (id) => {
+    const c = CAREERS[id]; if (!c) return; const [n, t] = api.buildingProgress(id);
+    const d = api.dialog(c.title, `${c.roles.map(r => `<div class="role"><b>${esc(r[0])}</b><span>${esc(r[1])}</span></div>`).join('')}<div class="task" style="margin-top:10px">You’ve completed <b>${n} of ${t}</b> workstations in this building. Look for the glowing rings.</div>`, [{ label: 'Close', fn: api.closeDialog }]);
+    d.classList.add('wide');
+  };
+  api.activity = (id, cb, hooks) => runActivity(id, { dialog: api.dialog, closeDialog: api.closeDialog, award, done, hooks }, cb);
   $('donePass').onclick = () => { $('done').style.display = 'none'; $('passBtn').onclick(); };
   $('doneNext').onclick = () => { $('done').style.display = 'none'; if ($('lab').style.display === 'flex' && lab.onClose) lab.onClose(); else setMode('walk'); };
   const done = (title, text) => { $('doneTitle').textContent = title; $('doneText').innerHTML = text; $('done').style.display = 'grid'; if ($('lab').style.display !== 'flex') setMode('dialog'); };

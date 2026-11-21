@@ -15,6 +15,13 @@ An original browser-based 3D city experience, intended as the first working proo
 - Career Passport, discovery badges and XP (stored locally on the browser device).
 - Desktop and mobile responsive interface, including a guest welcome flow.
 
+## V10: deeper interiors (`world/interiors.js`, `world/activities.js`)
+
+- Every featured building now has a finished room: plaster linings, skirting, timber dado or slats, a branded feature wall, pendant lights, rugs and plants. The rooms have three hands-on workstations, a careers board (five real jobs with study paths), standing professionals and seated staff, customers or passengers.
+- 20 new activities on five reusable engines: rank (triage, IRAC, recipe sequence, code lines), classify (alerts, food safety, merchandising, evidence), calc (dose, currency, zoning, margin, flight fuel), allocate (portfolio, media budget, power mix) and design (ad designer, bridge beam, titration, aircraft loading).
+- 3D tie-ins: the ad you design plays on the agency's studio screen, the test beam on the bridge rig visibly bends with your design's deflection, and desk workstations make the avatar sit down.
+- The Career Passport shows progress per building (x of 3) with badges; every activity awards XP once.
+
 ## V9: one connected Talentopia city (`index.html`, `world/`)
 
 The main experience is now a single continuous 3D city. You spawn at Central Plaza and can walk (or click-to-walk) to every district without leaving the world. The old homepage is kept as `legacy.html`; `medcity.html` now redirects into the hospital inside the city.

@@ -135,7 +135,7 @@ export class Ctx {
     this.colliders = [];  // {x0,x1,z0,z1,y0,y1}
     this.floors = [];     // {x0,x1,z0,z1,h, slope:{axis,from,to,h0,h1}}
     this.footprints = []; // map drawing {x,z,w,d,color,kind}
-    this.interactables = []; this.doors = []; this.animated = []; this.clickMeshes = []; this.labels = [];
+    this.interactables = []; this.doors = []; this.animated = []; this.clickMeshes = []; this.labels = []; this.hooks = {};
   }
   box(x, y, z, w, h, d, mat, { ry = 0, collide = false, shadow = true, vOff = 0 } = {}) {
     this.batch.add(ubox(w, h, d, vOff), mat, mat4(x, y + h / 2, z, ry), shadow);

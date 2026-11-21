@@ -7,7 +7,7 @@ import { Ctx, initMaterials, M, makeCar, Batch } from './kit.js';
 import * as TX from './textures.js';
 import { buildStreets, buildPlaza, buildMonorail, buildNav, findPath, nearestSidewalk, ROUTES, polyline, blockLoop, CITY } from './city.js';
 import { buildDistricts, DISTRICTS, PLAZA, districtAt } from './districts.js';
-import { furnish } from './interiors.js';
+import { furnish, furnishHospital } from './interiors.js';
 import { loadModel, Character } from './characters.js';
 import { createUI } from './ui.js';
 
@@ -143,6 +143,9 @@ gltfLoader.load('assets/medcity/medcity.glb', g => {
   STATIONS.push({ id: 'heartlab', building: 'hospital', x: mk.labStation.x, z: mk.labStation.z, label: 'Heart Lab display · Press E to explore the heart', action: 'hosp:lab', radius: 2.6 });
   PROS.push({ model: 'receptionist', x: mk.receptionist.x, z: mk.receptionist.z, y: 0.15, ry: 0, role: 'Receptionist · Maya', talk: null, building: 'hospital', station: 'reception' });
   PROS.push({ model: 'doctor', x: mk.doctor.x, z: mk.doctor.z, y: 0.15, ry: -Math.PI / 2, role: 'Cardiologist · Dr. Haddad', talk: 'Every medical student learns the heart’s structure first. Step onto the glowing ring at the display to open the Heart Lab.', building: 'hospital' });
+  // hospital workstations (triage kiosk, dosage bench, careers board) added into the shared world
+  const nCol = ctx.colliders.length; const hx = furnishHospital(ctx, HOSP.ox, HOSP.oz); STATIONS.push(...hx.stations); PROS.push(...hx.npcs);
+  ctx.batch.flush(scene); for (let i = nCol; i < ctx.colliders.length; i++) addCollider(ctx.colliders[i]);
   hospital.ready = true; setLoad('hospital', 1); checkReady();
 }, undefined, () => { fail('Could not load the hospital model.'); });
 let heart = null, heartParts = [];
@@ -193,7 +196,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
-ui.onMode = m => { mode = m; };
+ui.onMode = m => { mode = m; if (m === 'walk' && P.seated && player) player.sitDown(false); };
 
 function inputVector() {
   let x = 0, z = 0;
@@ -403,6 +406,14 @@ function runAction(s) {
   if (s.action === 'hosp:reception') return reception();
   if (s.action === 'hosp:lab') { player.play('Interact', { lock: true, then: () => openLab() }); return; }
   if (s.action.startsWith('mission:')) { const id = s.action.slice(8); player.play('Interact', { lock: true }); ui.mission(id, (res) => { if (res && res.done) event('mission:' + id); }); }
+  if (s.action.startsWith('career:')) { ui.careers(s.action.slice(7)); }
+  if (s.action.startsWith('act:')) {
+    const id = s.action.slice(4);
+    const stand = () => { if (P.seated) { P.seated = false; player.sitDown(false); P.pos.set(s.x, P.pos.y, s.z); } };
+    if (s.seat) { P.seated = true; P.pos.set(s.seat.x, s.seat.y, s.seat.z); P.yaw = s.seat.ry; P.speed = 0; player.sitDown(true); }
+    else player.play('Interact', { lock: false });
+    ui.activity(id, (res) => { stand(); if (res && res.done) event('act:' + id); }, ctx.hooks);
+  }
 }
 function reception() {
   event('talk:reception');
@@ -434,7 +445,9 @@ function updateBeacon(t) { const o = OBJ[objIdx]; const p = o && o.target && o.t
 const PRO_CHARS = []; const peds = [];
 async function spawnPeople() {
   for (const p of PROS) { const n = { ...p }; PRO_CHARS.push(n);
-    spawnChar(p.model).then(c => { n.c = c; c.root.position.set(p.x, p.y ?? 0.15, p.z); c.root.rotation.y = p.ry; c.idleClip = ['Idle', 'FoldArms', 'Idle'][PRO_CHARS.indexOf(n) % 3]; if (!c.acts[c.idleClip]) c.idleClip = 'Idle'; n.baseRy = p.ry; }).catch(() => {}); }
+    spawnChar(p.model).then(c => { n.c = c; c.root.position.set(p.x, p.y ?? 0.15, p.z); c.root.rotation.y = p.ry; n.baseRy = p.ry;
+      c.idleClip = p.idle || ['Idle', 'FoldArms', 'Idle'][PRO_CHARS.indexOf(n) % 3]; if (!c.acts[c.idleClip]) c.idleClip = 'Idle';
+      if (p.sit) { c.sitDown(true); c.sit = 1; c.sitClip = Math.random() < 0.5 ? 'SitTalk' : 'SitIdle'; } }).catch(() => {}); }
   // pedestrians on sidewalk loops around busy blocks
   const loops = [[0, 0, 2], [-130, -130, 2], [0, -130, 2], [130, -130, 1], [-130, 0, 1], [130, 0, 1], [0, 130, 1], [-130, 130, 1], [130, 130, 1]];
   const models = ['visitor_m', 'visitor_f', 'avatar_m1', 'avatar_f2', 'doctor', 'avatar_m2', 'receptionist', 'avatar_f1'].filter(m => m !== chosen);
@@ -458,7 +471,7 @@ function roundLoop(pts, r) { // round the corners of a rectangle loop
 }
 function updatePeople(dt) {
   const pp = player ? player.root.position : null;
-  for (const n of PRO_CHARS) { if (!n.c) continue; const near = pp && Math.hypot(pp.x - n.x, pp.z - n.z) < 6;
+  for (const n of PRO_CHARS) { if (!n.c) continue; const near = pp && !n.sit && Math.hypot(pp.x - n.x, pp.z - n.z) < 6;
     const vis = !pp || Math.hypot(pp.x - n.x, pp.z - n.z) < 90; n.c.root.visible = vis; if (!vis) continue;
     const want = near ? Math.atan2(pp.x - n.x, pp.z - n.z) : n.baseRy; const d = angDiff(n.c.root.rotation.y, want);
     const tr = THREE.MathUtils.clamp(d * 4, -2.5, 2.5); n.c.root.rotation.y += tr * dt; n.c.update(dt, 0, Math.abs(d) > 0.3 ? tr : 0); }

@@ -84,7 +84,7 @@ function capital(ctx) {
   const inner = classical(ctx, { x: -22, z: -104, w: 34, d: 20, h: 15, face: 's', cols: 8, enterable: true });
   sign(ctx, 'TALENTOPIA CENTRAL BANK', -22, 12.6, -85.85, 0, 1.0, { bg: null, fg: '#7a5a1e', glow: 0.1, backing: false });
   named(ctx, 'Talentopia Central Bank', 'capital', -22, -100, 36, 28, 16, 'bank');
-  feature(ctx, { id: 'bank', name: 'Talentopia Central Bank', district: 'capital', face: 's', ...inner, x: -22, z: -104, w: 34, d: 20, gfH: 12 });
+  feature(ctx, { id: 'bank', name: 'Talentopia Central Bank', district: 'capital', face: 's', ...inner, x: -22, z: -104, w: 34, d: 20, gfH: 9.3 });
   // finance tower (skyline anchor) with setback + lit crown
   glassTower(ctx, { x: 26, z: -128, w: 24, d: 24, h: 54, tint: [60, 95, 140], seed: 41 });
   glassTower(ctx, { x: 26, z: -128, w: 19, d: 19, y0: 54, h: 26, tint: [60, 95, 140], seed: 42 });
@@ -253,7 +253,7 @@ function civic(ctx) {
   const inner = classical(ctx, { x: 130, z: 122, w: 40, d: 22, h: 16, face: 'n', cols: 8, enterable: true });
   sign(ctx, 'TALENTOPIA COURTHOUSE', 130, 13.6, 99.85, Math.PI, 1.0, { bg: null, fg: '#5a4a2a', glow: 0.1, backing: false });
   named(ctx, 'Talentopia Courthouse', 'civic', 130, 118, 42, 30, 17, 'court');
-  feature(ctx, { id: 'court', name: 'Talentopia Courthouse', district: 'civic', face: 'n', ...inner, x: 130, z: 122, w: 40, d: 22, gfH: 13 });
+  feature(ctx, { id: 'court', name: 'Talentopia Courthouse', district: 'civic', face: 'n', ...inner, x: 130, z: 122, w: 40, d: 22, gfH: 10.3 });
   // civic square in front
   for (const x of [92, 168]) { treeAt(ctx, x, 84, 1.1, 0.15); treeAt(ctx, x, 96, 1, 0.15); benchAt(ctx, x + (x < 130 ? 6 : -6), 90, x < 130 ? Math.PI / 2 : -Math.PI / 2); }
   // law firm tower

@@ -82,7 +82,7 @@ export class Character {
     for (const k of ['Walk', 'Jog']) if (this.acts[k]) this.acts[k].time = this.phase * this.dur[k];
     tw[this.idleClip] = idle; tw.Walk = walk; tw.Jog = jog;
     // sitting
-    if (this.sitTarget !== undefined) { this.sit += (this.sitTarget - this.sit) * Math.min(1, dt / 0.35); if (this.sit > 0.01 && this.acts.SitIdle) { for (const k in tw) tw[k] *= 1 - this.sit; tw.SitIdle = this.sit; } }
+    if (this.sitTarget !== undefined) { this.sit += (this.sitTarget - this.sit) * Math.min(1, dt / 0.35); const sc = this.acts[this.sitClip] ? this.sitClip : 'SitIdle'; if (this.sit > 0.01 && this.acts[sc]) { for (const k in tw) tw[k] *= 1 - this.sit; tw[sc] = this.sit; } }
     // one-shot (interact, pick up, nod) layered over everything
     if (this.oneShot) {
       const o = this.oneShot; o.t += dt; const f = Math.min(1, o.t / 0.2, (o.d - o.t) / 0.25);
