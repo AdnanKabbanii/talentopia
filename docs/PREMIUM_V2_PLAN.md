@@ -61,3 +61,27 @@ Rules: no edits to `backup-2026-11-21-pre-premium`, nothing merged or pushed to 
 - Facial rigging and lip sync require blend shapes on the head mesh. MPFB's game-engine rig has no face bones, so expressions and visemes must be authored as shape keys in Blender (Milestone B/C work).
 - AI dialogue and photo-to-avatar both need a backend and API credentials the project does not have yet. Integration points will be built and clearly labelled.
 - No real phone test so far; the `?debug=1` device report exists for that.
+
+## Milestone B, delivered (feature/premium-city-v2)
+- **Movement**: walk 1.8, jog 3.2 (default), sprint 6.0 m/s.
+  - Ctrl/Alt or V switches to walking; Shift sprints; R toggles auto-run.
+  - On touch, joystick depth sets walk or jog, and the RUN button sprints.
+  - NPCs walk at 1.4–2.0 m/s.
+- **How the gaits work**: four phase-synced gaits (Stroll, WalkG, JogG, RunG) are derived from the CC0 clips by rescaling limb swing and cycle time (`world/characters.js`).
+  - Each gait's ground speed and foot-contact phase are measured on the character's own skeleton at load.
+  - Leg phase advances with distance travelled, so feet don't slide.
+  - Planted-foot slip measured in the browser: walk −0.4 %, jog 2.9 %, sprint −4.5 % of body speed.
+- **Avatar base** (`blender/avatar_build.py`): an MPFB body with 23 morph targets: 5 body, 10 face, 8 expressions (blink L/R, smile, jaw open, 2 visemes, brows up/down).
+  - Parts: 10 hairstyles, 8 outfits, 3 footwear, a hat, 2 eyebrow styles and 2 procedural beards.
+  - Every part is refitted to each body morph. Skin under clothing is hidden per outfit via a per-vertex bitmask.
+- **Avatar Studio** (`world/avatar.js`): a lit turntable with 360° drag, zoom and Full/Upper/Face framing.
+  - Controls: presentation (feminine ↔ masculine), build, muscle, height, face structure, skin (8 bases + fine tone), eye colour, hairstyle and colour, eyebrows, facial hair, outfit and outfit colour, footwear, eyewear (procedural, attached to the head bone) and hat.
+  - Expression preview (smile, talk, surprised); idle blinking.
+  - Choices are saved in `localStorage` (`avatarV2`), and the same model becomes the player.
+- **Photo-assisted creator**: an opt-in consent screen and the integration point `AVATAR_PHOTO_ENDPOINT` (null; no service connected). No photo is uploaded or stored.
+- **Known limits**:
+  - Finger motion is not retargeted (hands hold a relaxed rest pose).
+  - No lab coat, scrubs or chef uniform assets.
+  - Afro and some hair cards show a visible hairline edge.
+  - The NPCs still use the older fixed models.
+  - The avatar download is about 7.5 MB (base 5.8 MB).

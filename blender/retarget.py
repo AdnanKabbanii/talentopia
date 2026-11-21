@@ -61,7 +61,8 @@ for s_ in ('l', 'r'):
 RIG = {k: v.lower() for k, v in RIG.items()}
 def build_map(S):
     sb = {lower(b.name): b for b in S.data.bones}
-    return {b.name: sb.get(lower(b.name)) or sb.get(RIG.get(lower(b.name), '#')) for b in tb}
+    skip = os.environ.get('NOFINGERS') and (lambda n: n.split('_')[0] in ('index', 'middle', 'ring', 'pinky', 'thumb')) or (lambda n: False)
+    return {b.name: (None if skip(lower(b.name)) else (sb.get(lower(b.name)) or sb.get(RIG.get(lower(b.name), '#')))) for b in tb}
 
 def forward(arm):
     W = arm.matrix_world; b0 = arm.data.bones
@@ -196,6 +197,8 @@ for out_name, src_name in CLIPS:
     print('CLIP', out_name, results[out_name])
 
 for S, _ in sources: bpy.data.objects.remove(S, do_unlink=True)
+if os.environ.get('ANIMS_ONLY'):  # export just the skeleton + clips (meshes come from the avatar base)
+    for o in [o for o in bpy.data.objects if o.type == 'MESH']: bpy.data.objects.remove(o, do_unlink=True)
 for o in bpy.data.objects: o.select_set(o.type in ('MESH', 'ARMATURE'))
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True, export_skins=True, export_animations=True,
                           export_animation_mode='NLA_TRACKS', export_image_format='JPEG', export_jpeg_quality=80, export_morph=False,

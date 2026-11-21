@@ -1,0 +1,77 @@
+{
+ "Idle": {
+  "frames": 61,
+  "duration": 2.5,
+  "groundSpeed": 0.0
+ },
+ "Walk": {
+  "frames": 33,
+  "duration": 1.333,
+  "groundSpeed": 1.026
+ },
+ "WalkFormal": {
+  "frames": 33,
+  "duration": 1.333,
+  "groundSpeed": 1.007
+ },
+ "Jog": {
+  "frames": 23,
+  "duration": 0.917,
+  "groundSpeed": 5.582
+ },
+ "Sprint": {
+  "frames": 17,
+  "duration": 0.667,
+  "groundSpeed": 8.365
+ },
+ "Interact": {
+  "frames": 49,
+  "duration": 2.0,
+  "groundSpeed": -0.0
+ },
+ "Talk": {
+  "frames": 71,
+  "duration": 2.917,
+  "groundSpeed": -0.0
+ },
+ "SitEnter": {
+  "frames": 32,
+  "duration": 1.292,
+  "groundSpeed": -0.006
+ },
+ "SitIdle": {
+  "frames": 41,
+  "duration": 1.667,
+  "groundSpeed": -0.0
+ },
+ "SitExit": {
+  "frames": 25,
+  "duration": 1.0,
+  "groundSpeed": 0.013
+ },
+ "SitTalk": {
+  "frames": 71,
+  "duration": 2.917,
+  "groundSpeed": -0.0
+ },
+ "PickUp": {
+  "frames": 21,
+  "duration": 0.833,
+  "groundSpeed": 0.002
+ },
+ "FoldArms": {
+  "frames": 61,
+  "duration": 2.5,
+  "groundSpeed": 0.0
+ },
+ "Phone": {
+  "frames": 71,
+  "duration": 2.917,
+  "groundSpeed": 0.0
+ },
+ "Nod": {
+  "frames": 61,
+  "duration": 2.5,
+  "groundSpeed": 0.0
+ }
+}

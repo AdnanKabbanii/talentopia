@@ -1,0 +1,216 @@
+{
+ "morphs": [
+  "masc",
+  "fem",
+  "heavy",
+  "slim",
+  "muscular",
+  "jawWide",
+  "chinStrong",
+  "noseWide",
+  "noseNarrow",
+  "cheekbones",
+  "eyesBig",
+  "eyesUp",
+  "lipsFull",
+  "headRound",
+  "headSquare",
+  "blinkL",
+  "blinkR",
+  "smile",
+  "jawOpen",
+  "mouthO",
+  "mouthE",
+  "browsUp",
+  "browsDown"
+ ],
+ "skins": [
+  "young_caucasian_female",
+  "young_caucasian_male",
+  "young_asian_female",
+  "young_asian_male",
+  "young_african_female",
+  "young_african_male",
+  "middleage_caucasian_male",
+  "middleage_african_female"
+ ],
+ "hideBits": {
+  "male_casualsuit03": 0,
+  "female_casualsuit01": 1,
+  "male_casualsuit05": 2,
+  "female_casualsuit02": 3,
+  "male_elegantsuit01": 4,
+  "female_elegantsuit01": 5,
+  "male_worksuit01": 6,
+  "female_sportsuit01": 7,
+  "shoes01": 8,
+  "shoes03": 9,
+  "shoes06": 10
+ },
+ "parts": {
+  "hair": [
+   {
+    "id": "short02",
+    "label": "Short crop",
+    "file": "parts/hair_short02.glb",
+    "mesh": "hair__short02"
+   },
+   {
+    "id": "short01",
+    "label": "Short wave",
+    "file": "parts/hair_short01.glb",
+    "mesh": "hair__short01"
+   },
+   {
+    "id": "short03",
+    "label": "Side part",
+    "file": "parts/hair_short03.glb",
+    "mesh": "hair__short03"
+   },
+   {
+    "id": "short04",
+    "label": "Textured short",
+    "file": "parts/hair_short04.glb",
+    "mesh": "hair__short04"
+   },
+   {
+    "id": "bob01",
+    "label": "Bob",
+    "file": "parts/hair_bob01.glb",
+    "mesh": "hair__bob01"
+   },
+   {
+    "id": "bob02",
+    "label": "Long bob",
+    "file": "parts/hair_bob02.glb",
+    "mesh": "hair__bob02"
+   },
+   {
+    "id": "ponytail01",
+    "label": "Ponytail",
+    "file": "parts/hair_ponytail01.glb",
+    "mesh": "hair__ponytail01"
+   },
+   {
+    "id": "long01",
+    "label": "Long",
+    "file": "parts/hair_long01.glb",
+    "mesh": "hair__long01"
+   },
+   {
+    "id": "braid01",
+    "label": "Braid",
+    "file": "parts/hair_braid01.glb",
+    "mesh": "hair__braid01"
+   },
+   {
+    "id": "afro01",
+    "label": "Afro",
+    "file": "parts/hair_afro01.glb",
+    "mesh": "hair__afro01"
+   }
+  ],
+  "outfit": [
+   {
+    "id": "male_casualsuit03",
+    "label": "Casual shirt & jeans",
+    "file": "parts/outfit_male_casualsuit03.glb",
+    "mesh": "outfit__male_casualsuit03"
+   },
+   {
+    "id": "female_casualsuit01",
+    "label": "Casual tee & jeans",
+    "file": "parts/outfit_female_casualsuit01.glb",
+    "mesh": "outfit__female_casualsuit01"
+   },
+   {
+    "id": "male_casualsuit05",
+    "label": "Hoodie & trousers",
+    "file": "parts/outfit_male_casualsuit05.glb",
+    "mesh": "outfit__male_casualsuit05"
+   },
+   {
+    "id": "female_casualsuit02",
+    "label": "Casual top & skirt",
+    "file": "parts/outfit_female_casualsuit02.glb",
+    "mesh": "outfit__female_casualsuit02"
+   },
+   {
+    "id": "male_elegantsuit01",
+    "label": "Business suit",
+    "file": "parts/outfit_male_elegantsuit01.glb",
+    "mesh": "outfit__male_elegantsuit01"
+   },
+   {
+    "id": "female_elegantsuit01",
+    "label": "Tailored suit",
+    "file": "parts/outfit_female_elegantsuit01.glb",
+    "mesh": "outfit__female_elegantsuit01"
+   },
+   {
+    "id": "male_worksuit01",
+    "label": "Work uniform",
+    "file": "parts/outfit_male_worksuit01.glb",
+    "mesh": "outfit__male_worksuit01"
+   },
+   {
+    "id": "female_sportsuit01",
+    "label": "Sportswear",
+    "file": "parts/outfit_female_sportsuit01.glb",
+    "mesh": "outfit__female_sportsuit01"
+   }
+  ],
+  "shoes": [
+   {
+    "id": "shoes01",
+    "label": "Leather shoes",
+    "file": "parts/shoes_shoes01.glb",
+    "mesh": "shoes__shoes01"
+   },
+   {
+    "id": "shoes03",
+    "label": "Sneakers",
+    "file": "parts/shoes_shoes03.glb",
+    "mesh": "shoes__shoes03"
+   },
+   {
+    "id": "shoes06",
+    "label": "Boots",
+    "file": "parts/shoes_shoes06.glb",
+    "mesh": "shoes__shoes06"
+   }
+  ],
+  "hat": [
+   {
+    "id": "fedora01",
+    "label": "Fedora",
+    "file": "parts/hat_fedora01.glb",
+    "mesh": "hat__fedora01"
+   }
+  ]
+ },
+ "brows": [
+  {
+   "id": "eyebrow001",
+   "label": "Fine",
+   "mesh": "brows__eyebrow001"
+  },
+  {
+   "id": "eyebrow006",
+   "label": "Full",
+   "mesh": "brows__eyebrow006"
+  }
+ ],
+ "beards": [
+  {
+   "id": "stubble",
+   "label": "Stubble",
+   "mesh": "beard__stubble"
+  },
+  {
+   "id": "full",
+   "label": "Short beard",
+   "mesh": "beard__full"
+  }
+ ]
+}

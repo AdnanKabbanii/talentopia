@@ -16,6 +16,7 @@ import { furnish, furnishHospital } from './interiors.js';
 import { loadModel, Character } from './characters.js';
 import { createUI } from './ui.js';
 import { loadLandmarks, loadHospitalUpgrade } from './landmarks.js';
+import { AvatarModel, AvatarStudio } from './avatar.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -200,22 +201,46 @@ async function spawnChar(model) {
   const g = await loadModel(model); const c = new Character(g);
   // normalise to a realistic adult height
   let hip = 1; c.model.traverse(o => { if (o.isBone && o.name === 'pelvis') { const v = new THREE.Vector3(); o.getWorldPosition(v); hip = v.y; } });
-  const s = HEIGHTS[model] / Math.max(0.3, hip); c.leanG.scale.setScalar(s); c.leg *= s; for (const k in c.speeds) c.speeds[k] *= s;
+  const s = HEIGHTS[model] / Math.max(0.3, hip); c.leanG.scale.setScalar(s); c.leg *= s; for (const k in c.speeds) c.speeds[k] *= s; for (const g of c.gaits) g.speed *= s;
   scene.add(c.root); return c;
 }
 ui.renderAvatars(chosen, id => { chosen = id; });
+// ------------------------------------------------------------------ V2 custom avatar + Avatar Studio
+const avatar = new AvatarModel(); let avatarChar = null;
+const studio = new AvatarStudio({ renderer, envMap: null, store: cfg => { progress.avatarV2 = cfg; store(); }, onDone: () => { studio.close(); $('go').click(); } });
+const avatarReady = avatar.init(progress.avatarV2).then(() => {
+  avatarChar = new Character(avatar.gltf, { model: avatar.root, animations: avatar.animations });
+  avatarChar.morphMeshes = avatar.meshes;
+  let hip = 0.95; avatar.root.updateMatrixWorld(true); const pv = avatar.bones.pelvis; if (pv) { const v = new THREE.Vector3(); pv.getWorldPosition(v); hip = v.y; }
+  avatarChar.baseScale = 0.93 / Math.max(0.3, hip); avatarChar.gaits.forEach(g => g.speed0 = g.speed);
+  studio.attach(avatar, avatarChar); studio.applyHeight();
+  const b = $('studioBtn'); b.disabled = false; b.textContent = progress.avatarV2 ? 'Edit my avatar' : 'Create my avatar';
+  if (progress.avatarV2) $('avatarSummary').textContent = 'Your saved avatar is ready. You can edit it any time.';
+  return avatarChar;
+}).catch(e => { console.error(e); const b = $('studioBtn'); b.textContent = 'Avatar Studio unavailable (using presets)'; $('avatars').style.display = 'grid'; return null; });
+$('studioBtn').onclick = () => { if (!avatarChar) return; studio.scene.environment = scene.environment; studio.open(); };
+function useCustomAvatar() {
+  const c = avatarChar; const s = c.baseScale * avatar.cfg.height; c.leanG.scale.setScalar(s); c.leg = c.leg; for (const g of c.gaits) g.speed = (g.speed0 || g.speed) * s;
+  c.speeds = { Walk: c.gaitSpeed('WalkG'), Jog: c.gaitSpeed('JogG'), Sprint: c.gaitSpeed('RunG'), Stroll: c.gaitSpeed('Stroll') };
+  scene.add(c.root); c.root.rotation.set(0, 0, 0); return c;
+}
 
 // ------------------------------------------------------------------ player controller
 const P = { pos: new THREE.Vector3(), yaw: 0, speed: 0, vel: new THREE.Vector2(), route: [], routeCb: null, inside: null, lastSave: 0, yv: 0 };
 const keys = new Set(); const joy = { x: 0, y: 0, on: false }; let runToggle = false;
 let camYaw = Math.PI, camPitch = 0.32, camDist = 6.2, camTarget = new THREE.Vector3(), lastLook = -10, mode = 'loading';
-function WALK() { return player ? player.speeds.Walk * 1.42 : 1.4; }
-const RUN = 4.5;
+// V2 movement: walk ~1.8, default exploration jog ~3.2, sprint ~6.0 m/s (animation phase is locked to distance travelled)
+const SPEED = { walk: 1.8, jog: 3.2, sprint: 6.0 };
+let walkMode = false, autoRun = false;
+function WALK() { return SPEED.walk; }
+const RUN = SPEED.sprint;
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase(); if (mode === 'loading') return;
   if (['input', 'textarea'].includes(document.activeElement.tagName.toLowerCase())) return;
   keys.add(k); if (k.startsWith('arrow') || k === ' ') e.preventDefault();
   if (k === 'e' && mode === 'walk') { e.preventDefault(); interact(); }
+  if (k === 'r' && mode === 'walk') { autoRun = !autoRun; ui.toast(autoRun ? 'Auto-run on (R to stop)' : 'Auto-run off'); }
+  if (k === 'v' && mode === 'walk') { walkMode = !walkMode; ui.toast(walkMode ? 'Walking pace' : 'Jogging pace'); }
   if (k === 'm' && mode === 'walk') ui.openMap(mapData());
   else if (k === 'm' && mode === 'map') ui.closeMap();
   if (k === 'escape') { if (mode === 'lab') closeLab(); else ui.closeAll(); }
@@ -227,7 +252,7 @@ ui.onMode = m => { mode = m; if (m === 'walk' && P.seated && player) player.sitD
 
 function inputVector() {
   let x = 0, z = 0;
-  if (keys.has('w') || keys.has('arrowup')) z += 1; if (keys.has('s') || keys.has('arrowdown')) z -= 1;
+  if (keys.has('w') || keys.has('arrowup') || autoRun) z += 1; if (keys.has('s') || keys.has('arrowdown')) { z -= 1; autoRun = false; }
   if (keys.has('d') || keys.has('arrowright')) x += 1; if (keys.has('a') || keys.has('arrowleft')) x -= 1;
   if (joy.on) { x += joy.x; z += -joy.y; }
   const l = Math.hypot(x, z); if (l > 1) { x /= l; z /= l; }
@@ -238,12 +263,13 @@ const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d 
 function updatePlayer(dt) {
   if (!player) return;
   const [ix, iz, mag] = mode === 'walk' ? inputVector() : [0, 0, 0];
-  const running = keys.has('shift') || runToggle;
+  const running = keys.has('shift') || runToggle; const walking = !running && (walkMode || keys.has('control') || keys.has('alt'));
+  const pace = running ? SPEED.sprint : walking ? SPEED.walk : SPEED.jog;
   let desX = 0, desZ = 0, desSpeed = 0;
   if (mag > 0.05) {
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     desX = rx * ix + fx * iz; desZ = rz * ix + fz * iz; const l = Math.hypot(desX, desZ) || 1; desX /= l; desZ /= l;
-    desSpeed = (running ? RUN : WALK()) * Math.max(mag, joy.on ? 0.35 : 1);
+    desSpeed = joy.on && !running ? (mag < 0.6 ? SPEED.walk * Math.max(0.4, mag / 0.6) : SPEED.jog) : pace;
   } else if (P.route.length && mode === 'walk') {
     // stuck detection: if we barely moved for a while, sidestep around the obstacle
     P.stuckT = (P.stuckT || 0) + dt; if (P.stuckT > 0.8) { const moved = P.stuckFrom ? Math.hypot(P.pos.x - P.stuckFrom.x, P.pos.z - P.stuckFrom.z) : 9; P.stuckFrom = P.pos.clone(); P.stuckT = 0;
@@ -251,7 +277,7 @@ function updatePlayer(dt) {
         P.route.unshift({ x: P.pos.x + (-dz / d) * 1.4 * side + dx / d * 0.8, z: P.pos.z + (dx / d) * 1.4 * side + dz / d * 0.8, detour: true }); } }
     const t = P.route[0]; const dx = t.x - P.pos.x, dz = t.z - P.pos.z, d = Math.hypot(dx, dz);
     if (d < (P.route.length > 1 ? 1.2 : 0.45)) { P.route.shift(); if (!P.route.length && P.routeCb) { const cb = P.routeCb; P.routeCb = null; cb(); } }
-    else { desX = dx / d; desZ = dz / d; desSpeed = Math.min(running ? RUN : WALK(), P.route.length === 1 ? Math.max(0.6, d * 1.2) : 99); }
+    else { desX = dx / d; desZ = dz / d; const routePace = P.inside ? SPEED.walk : pace; desSpeed = Math.min(routePace, P.route.length === 1 ? Math.max(0.6, d * 1.4) : 99); }
   }
   // heading: turn toward the desired direction at a human turn rate
   let turn = 0;
@@ -263,7 +289,7 @@ function updatePlayer(dt) {
     const align = Math.max(0, Math.cos(diff)); desSpeed *= 0.25 + 0.75 * align * align;
   }
   // accelerate / decelerate smoothly (frame-rate independent)
-  const accel = desSpeed > P.speed ? (P.speed < 1.5 ? 3.2 : 4.5) : 6.5;
+  const accel = desSpeed > P.speed ? (P.speed < 1.5 ? 3.6 : P.speed < 3.4 ? 4.2 : 2.6) : 6.0;
   P.speed += (desSpeed - P.speed) * (1 - Math.exp(-accel * dt));
   if (P.speed < 0.02 && desSpeed === 0) P.speed = 0;
   // move along the facing direction (feet always travel the way the body points)
@@ -325,7 +351,8 @@ function updateCamera(dt) {
   const inside = !!P.inside;
   const dist = inside ? Math.min(camDist, 4.2) : camDist, pitch = inside ? Math.max(camPitch, 0.2) : camPitch;
   const want = tmp.set(P.pos.x, P.pos.y + 1.55, P.pos.z);
-  camTarget.lerp(want, 1 - Math.exp(-dt * 12));
+  camTarget.lerp(want, 1 - Math.exp(-dt * 16));
+  { const fov = 55 + Math.max(0, P.speed - 3.4) * 1.3; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); } }
   const cp = new THREE.Vector3(camTarget.x + Math.sin(camYaw) * Math.cos(pitch) * dist, camTarget.y + Math.sin(pitch) * dist, camTarget.z + Math.cos(camYaw) * Math.cos(pitch) * dist);
   if (inside) cp.y = Math.min(cp.y, (P.inside.floorH || 0.15) + (P.inside.gfH || 5) - 0.6);
   // keep the camera in front of walls between it and the avatar
@@ -519,7 +546,7 @@ async function spawnPeople() {
     for (let i = 0; i < n; i++) {
       const ped = { pl, s: (i / n) * pl.L + Math.random() * 20, dir: (k % 2 ? 1 : -1), pause: 0, nextPause: 30 + Math.random() * 60, speed: 0, yaw: 0, root: { position: new THREE.Vector3(1e5, 0, 1e5), visible: false } };
       const model = models[k++ % models.length]; peds.push(ped);
-      spawnChar(model).then(c => { ped.c = c; ped.root = c.root; ped.cruise = c.speeds.Walk * (1.05 + Math.random() * 0.3); }).catch(() => {});
+      spawnChar(model).then(c => { ped.c = c; ped.root = c.root; ped.cruise = 1.4 + Math.random() * 0.6; }).catch(() => {});
     }
   }
 }
@@ -656,7 +683,7 @@ $('sndBtn').onclick = () => { sndOn = !sndOn; $('sndBtn').textContent = sndOn ? 
 let readyCount = 0;
 function checkReady() {
   if (!loadParts.sky || !hospital.ready || !loadParts.landmarks) return;
-  perf.readyAt = performance.now(); $('loadTxt').textContent = 'City ready. Choose your avatar and enter.'; const g = $('go'); g.disabled = false; g.textContent = 'Enter Talentopia →';
+  perf.readyAt = performance.now(); $('loadTxt').textContent = 'City ready.'; const g = $('go'); g.disabled = false; g.textContent = 'Enter Talentopia →';
   loadModel(chosen).catch(() => {}); // prefetch the chosen avatar
   setupHeart();
 }
@@ -664,7 +691,8 @@ $('go').onclick = async () => {
   const g = $('go'); g.disabled = true; g.textContent = 'Loading your avatar…'; audioStart();
   try {
     progress.avatar3d = chosen; store();
-    player = await spawnChar(chosen);
+    const ac = await avatarReady; studio.close();
+    player = ac ? useCustomAvatar() : await spawnChar(chosen);
     const w = progress.world;
     if (w && w.x > CITY.minX && w.x < CITY.maxX && w.z > CITY.minZ && w.z < CITY.maxZ) { P.pos.set(w.x, w.y || 0, w.z); P.yaw = w.yaw || 0; }
     else { P.pos.set(plaza.spawn.x, plaza.P, plaza.spawn.z); P.yaw = plaza.spawn.ry; }
@@ -682,6 +710,7 @@ let lowFps = 0;
 const clock = new THREE.Clock(); let elapsed = 0, lastWhere = '', frames = 0, fpsT = 0;
 function step(dtOverride) {
   const dt = dtOverride || Math.min(clock.getDelta(), 1 / 20); elapsed += dt;
+  if (studio.active) { studio.render(dt); return; }
   updatePlayer(dt); updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
   WIND.value = elapsed;
   for (const f of ctx.animated) f(elapsed, dt);
@@ -723,4 +752,4 @@ function frame() { perfTick(); step(); requestAnimationFrame(frame); }
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
