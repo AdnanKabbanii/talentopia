@@ -111,3 +111,30 @@ Rules: no edits to `backup-2026-11-21-pre-premium`, nothing merged or pushed to 
   - **Lip sync**: estimated from text, not from audio analysis.
   - **Faces**: there is no per-viseme tongue or teeth animation beyond the jaw, beards render as fine dots up close, and some hairlines are hard-edged.
   - **Testing**: phone performance with many avatar staff hasn't been measured on a real device. In the desktop preview pane, the hospital renders about 330 draw calls and 835k triangles with 3 staff visible.
+
+## Milestone D, delivered (feature/premium-city-v2)
+Physically staged missions (`world/staging.js`). While a staged task is open, its panel docks to the side (right on desktop, bottom sheet on phones). The camera frames a real 3D scene that reacts to every choice, and a correct result plays out physically before the summary appears.
+- **How it hooks in**: the scoring logic is unchanged. `activities.js` and `ui.js` only report events (open, state, right, wrong, success, close), and `success` returns how long the payoff plays.
+- **Bank: loan assessment** (`m:bank`).
+  - A customer, Alex (V2 avatar), sits across from Lina.
+  - A holographic loan document above the desk updates live with the sliders: income, bills, amount, term, and a repayment bar against the $500 limit.
+  - Alex looks worried while the loan is unaffordable and nods and smiles when it becomes affordable. A wrong approval makes both Alex and Lina shake their heads.
+  - On success an APPROVED or REFERRED stamp lands on the document, Lina presents, and Alex stands up and waves.
+- **Kitchen: cook the order** (`a:ticket`): a correct sequence plays out on the prep counter, with a caption for each step.
+  - **Prep**: wash hands, then set out the ingredients.
+  - **Cook**: the chicken goes into the pan, the hob glows, smoke rises and the chicken browns. The probe thermometer climbs to 74 °C.
+  - **Finish**: the chicken rests, then it's plated with the vegetables and sent to the pass with a bell. Rami nods.
+  - **Lunch rush** (`m:kitchen`): the rice scale fills to 500 g, and the probe thermometer reads 74 °C.
+- **Agency: media budget** (`a:budget`).
+  - A holographic table shows four channel bars that grow with the sliders.
+  - A forecast screen shows predicted sign-ups against the 1,200 target and flags billboards over the 30% cap. The table ring turns green or pink.
+  - On success the campaign launches: a live sign-up counter and a four-week growth curve, and Yara smiles.
+- **Hospital: triage** (`a:triage`).
+  - A holographic anatomy figure (the V2 base body, with a scan-line and edge-glow shader that works on skinned meshes) rotates on a projector pad.
+  - Numbered, triage-coloured markers sit on each patient's injured region (airway, chest, arm, ankle, hand). They re-number and re-colour live as you reorder the list.
+  - A wrong order flashes the figure red. On success each category pulses in turn with a caption, then the figure flashes green.
+- **Fixes along the way**: the two bank advisor-desk chairs faced backwards and are now flipped. On portrait phones the staged camera backs away so the whole scene fits above the panel.
+- **Known limits**:
+  - The other 16 activities and missions still use panels only, though the system is ready for more scenes.
+  - The kitchen props are simple shapes, not Blender models.
+  - The anatomy hologram is the plain base body: no organs, and it's labelled by region only.

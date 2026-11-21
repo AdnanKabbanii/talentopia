@@ -134,12 +134,15 @@ export const ACTIVITIES = {
 export function runActivity(id, H, cb) {
   const a = ACTIVITIES[id]; if (!a) return;
   let mistakes = 0;
+  // physical staging (world/staging.js): the 3D scene reacts to these events; success returns how long its payoff plays
+  const S = (ev, d) => (H.hooks && H.hooks.stage ? H.hooks.stage('a:' + id, ev, d) : 0) || 0;
+  S('open');
   const finish = (extra = '') => {
-    const score = Math.max(1, 3 - mistakes); const g = H.award('a_' + id, 80, a.badge, a.icon, score, 3); H.closeDialog();
-    H.done(a.title + ' · complete', `${extra}${a.explain}<br><br>Accuracy: <b>${'★'.repeat(score)}${'☆'.repeat(3 - score)}</b>${g ? ` · <b>+${g} XP</b>` : ''}<br>Badge: <b>${a.icon} ${esc(a.badge)}</b>`);
-    cb && cb({ done: true, score });
+    const score = Math.max(1, 3 - mistakes); const g = H.award('a_' + id, 80, a.badge, a.icon, score, 3); H.closeDialog(true);
+    const show = () => { H.done(a.title + ' · complete', `${extra}${a.explain}<br><br>Accuracy: <b>${'★'.repeat(score)}${'☆'.repeat(3 - score)}</b>${g ? ` · <b>+${g} XP</b>` : ''}<br>Badge: <b>${a.icon} ${esc(a.badge)}</b>`); cb && cb({ done: true, score }); };
+    const wait = S('success', { score }); if (wait) setTimeout(show, wait); else show();
   };
-  const close = () => { H.closeDialog(); cb && cb({ closed: true }); };
+  const close = () => { S('close'); H.closeDialog(); cb && cb({ closed: true }); };
   const shell = (body, msg = '') => { const d = H.dialog(a.who, `<b>${esc(a.title)}.</b> ${a.intro || ''}${msg}`, []); d.classList.add('wide'); const o = d.querySelector('.opts'); o.innerHTML = body; return o; };
   const fb = (ok, html) => `<div class="task ${ok ? 'ok' : 'no'}" style="margin-top:8px">${html}</div>`;
   const leave = `<button class="secondary" data-x>Leave</button>`;
@@ -148,11 +151,12 @@ export function runActivity(id, H, cb) {
   if (a.type === 'rank') {
     let order = shuffle(a.items.map((_, i) => i)); while (order.every((v, i) => v === i)) order = shuffle(order);
     const render = (msg = '', marks = null) => {
+      S('state', { order: order.slice() });
       const o = shell(`<div class="rank">${order.map((k, i) => `<div class="ri ${marks ? (marks[i] ? 'good' : 'bad') : ''}"><b>${i + 1}</b><span class="${a.mono ? 'mono' : ''}">${esc(a.items[k])}</span><button data-up="${i}" ${i ? '' : 'disabled'}>↑</button><button data-dn="${i}" ${i < order.length - 1 ? '' : 'disabled'}>↓</button></div>`).join('')}</div>
         <div class="row" style="margin-top:10px"><button class="primary" data-ok>Check order</button>${leave}</div>`, msg);
       o.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { const i = +b.dataset.up; [order[i - 1], order[i]] = [order[i], order[i - 1]]; render(); });
       o.querySelectorAll('[data-dn]').forEach(b => b.onclick = () => { const i = +b.dataset.dn; [order[i + 1], order[i]] = [order[i], order[i + 1]]; render(); });
-      o.querySelector('[data-ok]').onclick = () => { const m = order.map((k, i) => k === i); if (m.every(Boolean)) finish(); else { mistakes++; render(fb(false, `${m.filter(Boolean).length} of ${m.length} in the right place. Green rows are correct; move the red ones.`), m); } };
+      o.querySelector('[data-ok]').onclick = () => { const m = order.map((k, i) => k === i); if (m.every(Boolean)) finish(); else { mistakes++; S('wrong'); render(fb(false, `${m.filter(Boolean).length} of ${m.length} in the right place. Green rows are correct; move the red ones.`), m); } };
       wire(o);
     };
     render();
@@ -163,7 +167,7 @@ export function runActivity(id, H, cb) {
       const o = shell(`<div class="cls">${items.map((it, n) => `<div class="ci ${check ? (it.pick === it.c ? 'good' : 'bad') : ''}"><span>${esc(it.t)}</span><div>${a.buckets.map((b, k) => `<button data-n="${n}" data-k="${k}" class="${it.pick === k ? 'on' : ''}">${esc(b)}</button>`).join('')}</div></div>`).join('')}</div>
         <div class="row" style="margin-top:10px"><button class="primary" data-ok>Check</button>${leave}</div>`, msg);
       o.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { items[+b.dataset.n].pick = +b.dataset.k; render(); });
-      o.querySelector('[data-ok]').onclick = () => { if (items.some(it => it.pick === null)) return render(fb(false, 'Sort every item first.')); const right = items.filter(it => it.pick === it.c).length; if (right === items.length) finish(); else { mistakes++; render(fb(false, `${right} of ${items.length} correct. Fix the red ones.`), true); } };
+      o.querySelector('[data-ok]').onclick = () => { if (items.some(it => it.pick === null)) return render(fb(false, 'Sort every item first.')); const right = items.filter(it => it.pick === it.c).length; if (right === items.length) finish(); else { mistakes++; S('wrong'); render(fb(false, `${right} of ${items.length} correct. Fix the red ones.`), true); } };
       wire(o);
     };
     render();
@@ -182,12 +186,12 @@ export function runActivity(id, H, cb) {
   if (a.type === 'allocate') {
     const v = a.start.slice();
     const render = (msg = '') => {
-      const total = v.reduce((x, y) => x + y, 0); const m = a.metric(v, a.parts);
+      const total = v.reduce((x, y) => x + y, 0); const m = a.metric(v, a.parts); S('state', { v: v.slice(), su: m.su || 0, ok: m.ok });
       const o = shell(`<div class="alloc">${a.parts.map((p, i) => `<label><span>${esc(p[0])}</span><input type="range" min="0" max="100" step="5" value="${v[i]}" data-i="${i}"><output>${v[i]}%</output></label>`).join('')}</div>
         <div class="big" style="margin:8px 0">${m.html} · Total <b style="color:${total === 100 ? '#1f7a4d' : '#b42318'}">${total}%</b></div>
         <div class="row"><button class="primary" data-ok>Submit plan</button>${leave}</div>`, msg);
       o.querySelectorAll('input[type=range]').forEach(r => r.oninput = () => { v[+r.dataset.i] = +r.value; render(); });
-      o.querySelector('[data-ok]').onclick = () => { if (total !== 100) return render(fb(false, 'Allocations must add up to exactly 100%.')); if (m.ok) finish(`<div class="task ok">${m.html}</div>`); else { mistakes++; render(fb(false, a.hint(m))); } };
+      o.querySelector('[data-ok]').onclick = () => { if (total !== 100) return render(fb(false, 'Allocations must add up to exactly 100%.')); if (m.ok) finish(`<div class="task ok">${m.html}</div>`); else { mistakes++; S('wrong'); render(fb(false, a.hint(m))); } };
       wire(o);
     };
     render();

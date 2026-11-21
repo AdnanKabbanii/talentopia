@@ -48,6 +48,9 @@ button{font:inherit;cursor:pointer;border:0;border-radius:12px}
 #dialog .opts button:hover{border-color:var(--violet)}
 #dialog .opts button.primary{background:var(--violet);color:#fff;border-color:var(--violet)}#dialog .opts .row button{text-align:center}
 #dialog .opts button.good{border-color:var(--mint);background:#effaf5}#dialog .opts button.bad{border-color:#f0a3a3;background:#fff4f4}
+#dialog.staged,#dialog.staged.wide{left:auto;right:16px;top:76px;bottom:auto;transform:none;width:min(440px,40vw);max-height:calc(100vh - 96px);overflow:auto}
+body.staged #obj,body.staged #mini,body.staged #prompt,body.staged #joy,body.staged #eBtn,body.staged #runBtn{opacity:0;pointer-events:none;transition:opacity .3s}
+@media (max-width:760px){#dialog.staged,#dialog.staged.wide{left:0;right:0;top:auto;bottom:0;width:auto;max-height:46vh;border-radius:18px 18px 0 0}}
 #talk{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);width:min(640px,94vw);padding:14px 18px 14px;z-index:8;display:none}
 #talk .tk-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 #talk .tk-head b{font-size:15px;color:var(--ink);margin-right:8px}#talk .tk-head span{font-size:11px;font-weight:800;letter-spacing:1px;color:#6b55c9;text-transform:uppercase}

@@ -23,13 +23,15 @@ export function createUI({ progress, store, onTravel }) {
   };
   api.setWhere = (name, color) => { $('whereTxt').textContent = name; $('where').querySelector('.dot').style.background = color; };
   let tt; api.toast = (msg) => { const t = $('toast'); t.innerHTML = msg; t.style.display = 'block'; clearTimeout(tt); tt = setTimeout(() => t.style.display = 'none', 3200); };
+  let staged = null; api.setStaged = k => { staged = k; $('dialog').classList.toggle('staged', !!k); document.body.classList.toggle('staged', !!k); };
+  api.stage = (key, ev, data) => (api.onStage ? api.onStage(key, ev, data) : 0) || 0;
   api.dialog = (who, html, opts = [], note = '') => {
-    const d = $('dialog'); d.style.display = 'block'; d.classList.remove('wide'); setMode('dialog');
+    const d = $('dialog'); d.style.display = 'block'; d.classList.remove('wide'); d.classList.toggle('staged', !!staged); setMode('dialog');
     d.innerHTML = `<div class="who">${esc(who)}</div><p>${html}</p><div class="opts"></div>${note ? `<div class="note">${note}</div>` : ''}`;
     const o = d.querySelector('.opts'); opts.forEach(op => { const b = document.createElement('button'); b.innerHTML = op.label; b.onclick = () => op.fn(b); o.appendChild(b); });
     return d;
   };
-  api.closeDialog = () => { $('dialog').style.display = 'none'; setMode('walk'); };
+  api.closeDialog = (keepStage) => { const keep = keepStage === true; $('dialog').style.display = 'none'; if (staged && !keep) api.stage(staged, 'close'); setMode(keep ? 'dialog' : 'walk'); };
   api.closeAll = () => { api.closeDialog(); api.closeMap(); $('done').style.display = 'none'; };
   api.renderObjectives = (OBJ, idx) => {
     $('objList').innerHTML = OBJ.map((o, i) => `<li class="${i < idx ? 'ok' : i === idx ? 'now' : ''}"><b>${i < idx ? '✓' : i + 1}</b><span>${esc(o.t)}</span></li>`).join('');
@@ -53,7 +55,7 @@ export function createUI({ progress, store, onTravel }) {
     const d = api.dialog(c.title, `${c.roles.map(r => `<div class="role"><b>${esc(r[0])}</b><span>${esc(r[1])}</span></div>`).join('')}<div class="task" style="margin-top:10px">You’ve completed <b>${n} of ${t}</b> workstations in this building. Look for the glowing rings.</div>`, [{ label: 'Close', fn: api.closeDialog }]);
     d.classList.add('wide');
   };
-  api.activity = (id, cb, hooks) => runActivity(id, { dialog: api.dialog, closeDialog: api.closeDialog, award, done, hooks }, cb);
+  api.activity = (id, cb, hooks) => runActivity(id, { dialog: api.dialog, closeDialog: api.closeDialog, award, done, hooks: { ...hooks, stage: api.stage } }, cb);
   $('donePass').onclick = () => { $('done').style.display = 'none'; $('passBtn').onclick(); };
   $('doneNext').onclick = () => { $('done').style.display = 'none'; if ($('lab').style.display === 'flex' && lab.onClose) lab.onClose(); else setMode('walk'); };
   const done = (title, text) => { $('doneTitle').textContent = title; $('doneText').innerHTML = text; $('done').style.display = 'grid'; if ($('lab').style.display !== 'flex') setMode('dialog'); };
@@ -89,32 +91,33 @@ export function createUI({ progress, store, onTravel }) {
   };
   api.mission = (id, cb) => {
     if (id === 'bank') return bankMission(cb);
-    const m = MISSIONS[id]; if (!m) return; let i = 0, score = 0, first = true;
+    const m = MISSIONS[id]; if (!m) return; let i = 0, score = 0, first = true; const S = (ev, d) => api.stage('m:' + id, ev, d); S('open');
     const step = (msg) => {
       const s = m.steps[i];
       if (s.input) {
         const d = api.dialog(m.who, `<b>Step ${i + 1}/${m.steps.length}.</b> ${s.q}${msg || ''}`, []);
         const o = d.querySelector('.opts'); o.innerHTML = `<div class="row"><input type="number" id="numIn" placeholder="grams"> <button class="primary" id="numGo">Check</button></div>`;
-        const go = () => { const v = +$('numIn').value; if (Math.abs(v - s.c) < 0.5) { if (first) score++; next(`<div class="task ok" style="margin-top:8px">✓ ${s.e}</div>`); } else { first = false; step(`<div class="task no" style="margin-top:8px">Not quite. Try again: what is 300 ÷ 6 × 10?</div>`); } };
+        const go = () => { const v = +$('numIn').value; if (Math.abs(v - s.c) < 0.5) { if (first) score++; S('right', { i }); next(`<div class="task ok" style="margin-top:8px">✓ ${s.e}</div>`); } else { first = false; S('wrong', { i }); step(`<div class="task no" style="margin-top:8px">Not quite. Try again: what is 300 ÷ 6 × 10?</div>`); } };
         $('numGo').onclick = go; $('numIn').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') go(); }; setTimeout(() => { const n = $('numIn'); if (n) n.focus(); }, 50); return;
       }
       const order = s.a.map((_, k) => k).sort(() => Math.random() - 0.5);
       api.dialog(m.who, `<b>Step ${i + 1}/${m.steps.length}.</b> ${s.q}${msg || ''}`, order.map(k => ({ label: s.a[k], fn: (b) => {
-        if (k === s.c) { if (first) score++; b.classList.add('good'); setTimeout(() => next(`<div class="task ok" style="margin-top:8px">✓ ${s.e}</div>`), 450); }
-        else { first = false; b.classList.add('bad'); }
+        if (k === s.c) { if (first) score++; S('right', { i }); b.classList.add('good'); setTimeout(() => next(`<div class="task ok" style="margin-top:8px">✓ ${s.e}</div>`), 450); }
+        else { first = false; S('wrong', { i }); b.classList.add('bad'); }
       } })));
     };
     const next = (fb) => { i++; first = true; if (i < m.steps.length) step(fb); else finish(fb); };
-    const finish = (fb) => { const g = award('m_' + id, m.xp, m.badge, m.icon, score, m.steps.length); api.closeDialog();
-      done('Challenge complete', `${fb || ''}<br>You got <b>${score}/${m.steps.length}</b> right first time${g ? ` and earned <b>+${g} XP</b>` : ''}.<br>Badge: <b>${m.icon} ${m.badge}</b>`); cb && cb({ done: true, score }); };
+    const finish = (fb) => { const g = award('m_' + id, m.xp, m.badge, m.icon, score, m.steps.length); api.closeDialog(true);
+      const show = () => { done('Challenge complete', `${fb || ''}<br>You got <b>${score}/${m.steps.length}</b> right first time${g ? ` and earned <b>+${g} XP</b>` : ''}.<br>Badge: <b>${m.icon} ${m.badge}</b>`); cb && cb({ done: true, score }); };
+      const w = S('success', { score }); if (w) setTimeout(show, w); else show(); };
     step();
   };
   // Capital Bay: loan affordability assessment with a live repayment calculator
   function bankMission(cb) {
-    const APR = 0.07; let amount = 25000, years = 4;
+    const APR = 0.07; let amount = 25000, years = 4; const S = (ev, d) => api.stage('m:bank', ev, d); S('open');
     const pay = () => { const r = APR / 12, n = years * 12; return amount * r / (1 - Math.pow(1 + r, -n)); };
     const render = (msg = '') => {
-      const p = pay(), ok = p <= 500;
+      const p = pay(), ok = p <= 500; S('state', { amount, years, p, ok });
       const d = api.dialog('Lina · Loan Advisor', `<b>Client:</b> Alex wants to borrow for a used car. After rent and bills, Alex can afford at most <b>$500 per month</b>. Interest rate: <b>7% APR</b>. Adjust the loan, then make a decision.`, []);
       const o = d.querySelector('.opts');
       o.innerHTML = `<div class="calc"><label>Loan amount <output>$${amount.toLocaleString()}</output><input type="range" id="lAmt" min="5000" max="40000" step="1000" value="${amount}"></label>
@@ -122,12 +125,12 @@ export function createUI({ progress, store, onTravel }) {
         <div class="big">Monthly repayment: <span style="color:${ok ? '#1f7a4d' : '#b42318'}">$${p.toFixed(0)}</span> · total interest $${(p * years * 12 - amount).toFixed(0)}</div></div>
         <div class="row"><button class="primary" id="lApprove">Approve this loan</button><button class="secondary" id="lDecline">Decline / refer back</button></div>${msg}`;
       $('lAmt').oninput = e => { amount = +e.target.value; render(); }; $('lYrs').oninput = e => { years = +e.target.value; render(); };
-      $('lApprove').onclick = () => { if (ok) finish(true); else render(`<div class="task no" style="margin-top:8px">$${p.toFixed(0)} per month is above Alex’s $500 limit. A responsible lender would not approve this. Try a smaller amount or a longer term.</div>`); };
-      $('lDecline').onclick = () => { if (!ok) finish(false); else render(`<div class="task no" style="margin-top:8px">This structure is affordable ($${p.toFixed(0)} ≤ $500). You could approve it, while noting that a longer term costs more interest.</div>`); };
+      $('lApprove').onclick = () => { if (ok) finish(true); else S('wrong'), render(`<div class="task no" style="margin-top:8px">$${p.toFixed(0)} per month is above Alex’s $500 limit. A responsible lender would not approve this. Try a smaller amount or a longer term.</div>`); };
+      $('lDecline').onclick = () => { if (!ok) finish(false); else S('wrong'), render(`<div class="task no" style="margin-top:8px">This structure is affordable ($${p.toFixed(0)} ≤ $500). You could approve it, while noting that a longer term costs more interest.</div>`); };
     };
     const finish = (approved) => {
-      const g = award('m_bank', 150, 'Capital Bay Credit Analyst', '◈', 1, 1); api.closeDialog();
-      done('Loan assessment complete', `${approved ? `You approved <b>$${amount.toLocaleString()}</b> over <b>${years} years</b> at <b>$${pay().toFixed(0)}</b>/month, within Alex’s budget.` : 'You correctly declined an unaffordable structure.'}<br><br>Affordability is one part of real lending decisions; banks also check credit history, income stability and existing debt.${g ? `<br><b>+${g} XP</b>` : ''}<br>Badge: <b>◈ Capital Bay Credit Analyst</b>`);
+      const g = award('m_bank', 150, 'Capital Bay Credit Analyst', '◈', 1, 1); api.closeDialog(true);
+      const w = S('success', { approved }); setTimeout(() => done('Loan assessment complete', `${approved ? `You approved <b>$${amount.toLocaleString()}</b> over <b>${years} years</b> at <b>$${pay().toFixed(0)}</b>/month, within Alex’s budget.` : 'You correctly declined an unaffordable structure.'}<br><br>Affordability is one part of real lending decisions; banks also check credit history, income stability and existing debt.${g ? `<br><b>+${g} XP</b>` : ''}<br>Badge: <b>◈ Capital Bay Credit Analyst</b>`), w);
       cb && cb({ done: true });
     };
     render();

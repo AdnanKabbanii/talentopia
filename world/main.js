@@ -19,6 +19,7 @@ import { loadLandmarks, loadHospitalUpgrade } from './landmarks.js';
 import { AvatarModel, AvatarStudio } from './avatar.js';
 import { Conversations, CAST } from './conversations.js';
 import { Speech } from './speech.js';
+import { Staging } from './staging.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -251,7 +252,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
-ui.onMode = m => { mode = m; if (m === 'walk' && P.seated && player) player.sitDown(false); };
+ui.onMode = m => { mode = m; if (m === 'walk' && P.seated && player) player.sitDown(false); if (m === 'walk' && typeof staging !== 'undefined') staging.end(); };
 
 function inputVector() {
   let x = 0, z = 0;
@@ -354,6 +355,7 @@ function updateCamera(dt) {
   if (mode === 'lab' && heartPivot) { labCamera(dt); return; }
   if (!player) { flyover(dt); return; }
   if (intro) { introCam(dt); return; }
+  if (staging.cam && (mode === 'dialog' || mode === 'walk')) { stageCamera(dt); return; } else if (viewOff) { camera.clearViewOffset(); viewOff = false; camYaw = Math.atan2(camera.position.x - P.pos.x, camera.position.z - P.pos.z); }
   if (mode === 'talk' && conv.active && conv.active.n.c) { talkCamera(dt); return; }
   const inside = !!P.inside;
   const dist = inside ? Math.min(camDist, 4.2) : camDist, pitch = inside ? Math.max(camPitch, 0.2) : camPitch;
@@ -374,6 +376,19 @@ function updateCamera(dt) {
 // conversation framing: over the player's shoulder onto the speaker (kept in front of walls)
 const headPos = (c, out) => { const h = c.bones.head; if (h) { h.getWorldPosition(out); out.y += 0.05; } else out.copy(c.root.position).setY(c.root.position.y + 1.6); return out; };
 const _ph = new THREE.Vector3(), _nh = new THREE.Vector3();
+// staged tasks: frame the 3D scene beside the task panel (panel on the right on desktop, at the bottom on phones)
+let viewOff = false; const stageShot = { pos: new THREE.Vector3(), look: new THREE.Vector3(), key: null };
+function stageCamera(dt) {
+  const s = staging.cam, W = innerWidth, H = innerHeight;
+  if (W < 760) { const oy = Math.round(H * 0.42); camera.setViewOffset(W, H + oy, 0, oy, W, H); } else { const ox = Math.round(Math.min(460, W * 0.36)); camera.setViewOffset(W + ox, H, ox, 0, W, H); }
+  viewOff = true;
+  if (stageShot.key !== staging.cur.key) { stageShot.key = staging.cur.key; stageShot.pos.copy(camera.position); stageShot.look.copy(camTarget); }
+  // portrait phones see a narrow slice: back the camera away from the scene so it all fits
+  const want = W < H ? tmp.copy(s.pos).sub(s.look).multiplyScalar(Math.min(2.2, 1 + (H / W - 1) * 0.9)).add(s.look) : s.pos;
+  const k = 1 - Math.exp(-dt * 3.5); stageShot.pos.lerp(want, k); stageShot.look.lerp(s.look, k);
+  camera.position.copy(stageShot.pos); camera.lookAt(stageShot.look); camTarget.copy(stageShot.look);
+  if (Math.abs(camera.fov - 50) > 0.05) { camera.fov += (50 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+}
 function talkCamera(dt) {
   const n = conv.active.n; headPos(player, _ph); headPos(n.c, _nh);
   const s = conv.camera(_ph, _nh); if (!s) return;
@@ -513,6 +528,20 @@ function interact() {
 }
 function faceTowards(x, z) { P.yaw = Math.atan2(x - P.pos.x, z - P.pos.z); }
 function talk(n) { P.route = []; P.routeCb = null; conv.start(n); }
+// ------------------------------------------------------------------ physically staged missions (Milestone D)
+const staging = new Staging({
+  scene, ctx, ui, camera, player: () => player,
+  stations: id => STATIONS.find(s => s.id === id), npc: part => PRO_CHARS.find(n => n.role.includes(part)),
+  spawnAvatar: look => spawnAvatarNpc(look), spawnFigure: () => spawnFigure(),
+  placePlayer: (x, z, yaw) => { P.route = []; P.routeCb = null; P.speed = 0; P.pos.set(x, P.pos.y, z); P.pos.y = groundAt(x, z, P.pos.y + 0.5); P.yaw = yaw; if (player) { player.root.position.copy(P.pos); player.root.rotation.y = yaw; } },
+});
+ui.onStage = (k, ev, d) => staging.event(k, ev, d);
+async function spawnFigure() { // the anatomy hologram: the V2 base body alone, posed with one frame of the idle clip
+  const am = new AvatarModel(); await am.init({ hair: 'none', outfit: 'none', shoes: 'none', beard: 'none', glasses: 'none', hat: 'none', pres: 0.4, muscle: 0.5, build: 0 });
+  const idle = am.animations.find(a => a.name === 'Idle'); if (idle) { const mx = new THREE.AnimationMixer(am.root); const c = idle.clone(); c.tracks = c.tracks.filter(t => !/^Root\.position/i.test(t.name)); mx.clipAction(c).play(); mx.update(0.4); }
+  am.root.updateMatrixWorld(true); const h = am.bones.head ? am.bones.head.getWorldPosition(new THREE.Vector3()).y + 0.12 : 1.75;
+  return { root: am.root, body: am.body, bones: am.bones, height: h };
+}
 // ------------------------------------------------------------------ conversations (scripted, voiced, lip-synced; optional AI)
 const speech = new Speech();
 const conv = new Conversations({
@@ -774,7 +803,7 @@ const clock = new THREE.Clock(); let elapsed = 0, lastWhere = '', frames = 0, fp
 function step(dtOverride) {
   const dt = dtOverride || Math.min(clock.getDelta(), 1 / 20); elapsed += dt;
   if (studio.active) { studio.render(dt); return; }
-  updatePlayer(dt); conv.update(dt); updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
+  updatePlayer(dt); conv.update(dt); staging.update(dt); updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
   WIND.value = elapsed;
   for (const f of ctx.animated) f(elapsed, dt);
   updatePrompt(); updateBeacon(elapsed);
@@ -815,4 +844,4 @@ function frame() { perfTick(); step(); requestAnimationFrame(frame); }
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };

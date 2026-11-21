@@ -53,7 +53,7 @@ export const CAREERS = {
 
 // Builds the interior for each featured id. Returns { stations, npcs }
 export function furnish(ctx, f) {
-  const fr = frame(f); const out = { stations: [], npcs: [] };
+  const fr = frame(f); const out = { stations: [], npcs: [] }; (ctx.frames = ctx.frames || {})[f.id] = fr;
   const { W, D, H } = fr;
   const station = (id, u, v, label, action, o = {}) => { const [x, z] = fr.F(u, v); const s = { id, x, z, label, action, radius: o.radius || 2.0, building: f.id }; if (o.seat) { const [sx, sz] = fr.F(o.seat[0], o.seat[1]); s.seat = { x: sx, z: sz, ry: fr.ry + o.seat[2], y: fr.y }; } out.stations.push(s); ring(u, v, o.color); return s; };
   const npc = (model, u, v, rot, role, talk, o = {}) => { const [x, z] = fr.F(u, v); out.npcs.push({ model, x, z, y: fr.y, ry: fr.ry + rot, role, talk, building: f.id, sit: !!o.sit, idle: o.idle }); };
@@ -101,11 +101,11 @@ export function furnish(ctx, f) {
     npc('doctor', W * 0.2, D - 1.8, Math.PI, 'Teller · Omar', 'Hello! Our market wall on the right shows how investments move every day.');
     // advisor desk (main mission) + a second advisor working seated
     put(ctx, fr, -W / 2 + 4, D * 0.45, Math.PI / 2, [...desk(1.8, 0.9, M('wood')), ...monitor(0, -0.25)], [0.9, 0.45]);
-    put(ctx, fr, -W / 2 + 5.3, D * 0.45, Math.PI / 2, chair(M('leather')));
+    put(ctx, fr, -W / 2 + 5.3, D * 0.45, -Math.PI / 2, chair(M('leather')));
     npc('receptionist', -W / 2 + 2.9, D * 0.45, Math.PI / 2, 'Loan Advisor · Lina', null);
     station('bank_loan', -W / 2 + 5.6, D * 0.45, 'Loan Advisor desk · Press E to assess a loan', 'mission:bank');
     put(ctx, fr, -W / 2 + 4, D * 0.75, Math.PI / 2, [...desk(1.8, 0.9, M('wood')), ...laptop(0, 0)], [0.9, 0.45]);
-    put(ctx, fr, -W / 2 + 3.1, D * 0.75, -Math.PI / 2, chair(M('leather')));
+    put(ctx, fr, -W / 2 + 3.1, D * 0.75, Math.PI / 2, chair(M('leather')));
     npc('doctor', -W / 2 + 3.1, D * 0.75, -Math.PI / 2, 'Financial Advisor · Karim', null, { sit: true });
     // teller window: currency exchange
     station('bank_fx', 0, D - 4.4, 'Teller window · Press E to exchange currency for a customer', 'act:exchange');
@@ -261,7 +261,7 @@ export function furnish(ctx, f) {
 // Hospital extras (the hospital interior itself comes from the Blender GLB): triage kiosk, dosage bench, careers board.
 export function furnishHospital(ctx, ox, oz) {
   const out = { stations: [], npcs: [] };
-  const fr = { F: (u, v) => [ox + u, oz + v], ry: 0, y: 0.15, W: 60, D: 30, H: 4.6 };
+  const fr = { F: (u, v) => [ox + u, oz + v], ry: 0, y: 0.15, W: 60, D: 30, H: 4.6 }; (ctx.frames = ctx.frames || {}).hospital = fr;
   const ring = (x, z, color = 0x8056f6) => { const m = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.78, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.18, z); ctx.scene.add(m); ctx.animated.push(t => { m.material.opacity = 0.4 + 0.35 * Math.sin(t * 3 + x); }); };
   // triage kiosk in the west lobby (local x -20, z -35)
   put(ctx, fr, -20, -36.2, Math.PI, kiosk(), [0.35, 0.25]);
