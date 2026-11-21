@@ -8,6 +8,7 @@ const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // profession search: words people type → featured building
 const KEYWORDS = {
+  cityhall: 'city hall guide nova help start passport avatar events university learning orientation',
   hospital: 'doctor nurse medicine medical health hospital surgeon cardiologist pharmacist pharmacy dentist paramedic radiographer anatomy triage',
   bank: 'bank banking finance financial accountant accounting loan investment investor teller money economist credit analyst',
   agency: 'marketing advertising design graphic designer copywriter media brand creative art director social',
@@ -128,6 +129,7 @@ export class WorldView {
       ${c ? `<div class="sh-tags">${c.roles.slice(0, 4).map(r => `<span>${esc(r[0])}</span>`).join('')}</div>` : ''}
       <p class="sh-note">${st.length} hands-on experience${st.length === 1 ? '' : 's'} inside: ${esc(st.slice(0, 3).map(s => s.label.split(' · ')[0]).join(', '))}${st.length > 3 ? '…' : ''}</p>
       <div class="sh-row"><button class="btn-glass" data-walk="${fid}">Walk there</button><button class="btn-primary" data-travel="${fid}">Fast travel</button></div>
+      <div class="sh-row"><button class="btn-glass" data-save="${fid}">${this.d.isSaved && this.d.isSaved(fid) ? '♥ Saved to Passport' : '♡ Save this career'}</button></div>
       <div class="sh-row"><button class="linkbtn" data-back="${f.district}">Back to ${esc(x.name || 'district')}</button></div>`, `building:${fid}`);
     this.setCrumb(x.name, f.name);
   }
@@ -139,6 +141,7 @@ export class WorldView {
     s.querySelectorAll('[data-f]').forEach(b => b.onclick = () => this.focusBuilding(b.dataset.f));
     s.querySelectorAll('[data-fit]').forEach(b => b.onclick = () => { this.closeSheet(); this.fit(); });
     s.querySelectorAll('[data-back]').forEach(b => b.onclick = () => this.focusDistrict(b.dataset.back));
+    s.querySelectorAll('[data-save]').forEach(b => b.onclick = () => { const on = this.d.toggleSave(b.dataset.save); b.textContent = on ? '♥ Saved to Passport' : '♡ Save this career'; });
     s.querySelectorAll('[data-walk]').forEach(b => b.onclick = () => { const f = this.d.FEATURED().find(q => q.id === b.dataset.walk); this.close(() => this.d.walkTo(f)); });
     s.querySelectorAll('[data-travel]').forEach(b => b.onclick = () => { const f = this.d.FEATURED().find(q => q.id === b.dataset.travel); this.close(() => this.d.travelTo(f)); });
   }

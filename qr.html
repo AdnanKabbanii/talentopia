@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Talentopia · Scan to enter</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--navy:#111827;--violet:#8D70FF;--cyan:#42DBFF}
+  *{box-sizing:border-box}html,body{margin:0;height:100%}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#fff;background:#111827 url(assets/ui/city_poster.jpg) center/cover;display:grid;place-items:center}
+  body::before{content:'';position:fixed;inset:0;background:linear-gradient(120deg,rgba(17,24,39,.88),rgba(17,24,39,.55))}
+  main{position:relative;display:flex;gap:6vw;align-items:center;padding:4vw;flex-wrap:wrap;justify-content:center}
+  .qr{background:#fff;padding:28px;border-radius:32px;box-shadow:0 30px 80px rgba(0,0,0,.4)}
+  .qr canvas,.qr img{display:block;width:min(46vh,70vw);height:auto;image-rendering:pixelated}
+  .brand{font-weight:800;letter-spacing:4px;font-size:16px;opacity:.85;display:flex;gap:10px;align-items:center}.brand img{width:34px;height:34px;border-radius:9px}
+  h1{font-size:clamp(34px,6vw,76px);line-height:1.02;margin:14px 0 12px;letter-spacing:-1.5px}
+  p{font-size:clamp(16px,2vw,24px);opacity:.85;margin:0 0 20px;max-width:520px}
+  .url{display:inline-block;font-size:clamp(14px,1.6vw,20px);font-weight:700;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);padding:10px 16px;border-radius:999px}
+  .steps{display:flex;gap:18px;margin-top:22px;font-size:15px;opacity:.85}.steps b{color:var(--cyan)}
+</style>
+</head>
+<body>
+<main>
+  <div class="qr" id="qr" aria-label="QR code to open Talentopia"></div>
+  <div>
+    <div class="brand"><img src="assets/brand/logo.svg" alt="">TALENTOPIA</div>
+    <h1>Your Future<br>Is Waiting.</h1>
+    <p>Scan with your phone camera to explore careers in 3D. No app, no account.</p>
+    <span class="url" id="url"></span>
+    <div class="steps"><span><b>1</b> Scan</span><span><b>2</b> Enter as a guest</span><span><b>3</b> Try your first career</span></div>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+  // Presenter page. The QR always points at the stable production entry path /demo (with campaign parameters for counting visits).
+  // Override with ?target=https://... only for rehearsals on a preview.
+  const q = new URLSearchParams(location.search);
+  const target = q.get('target') || 'https://talentopia.vercel.app/demo?utm_source=qr&utm_medium=presentation&utm_campaign=' + encodeURIComponent(q.get('campaign') || 'classroom');
+  document.getElementById('url').textContent = target.replace(/^https:\/\//, '').replace(/\?.*$/, '');
+  const qr = qrcode(0, 'M'); qr.addData(target); qr.make();
+  document.getElementById('qr').innerHTML = qr.createImgTag(10, 0);
+</script>
+</body>
+</html>

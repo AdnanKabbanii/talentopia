@@ -170,6 +170,7 @@ body.intro #top,body.intro #where,body.intro #obj,body.intro #mini,body.intro #h
   <div class="chip glass" id="xp">✦ 0 XP</div>
   <div class="chip glass btn" id="passBtn">Career Passport</div>
   <div class="chip glass btn" id="mapBtn">City map <small style="opacity:.6">(M)</small></div>
+  <div class="chip glass btn" id="novaBtn" title="Ask NOVA, your guide" aria-label="Ask NOVA, your guide"><span class="nova-dot"></span>NOVA</div>
   <div class="chip glass btn" id="setBtn" title="Settings" aria-label="Settings">⚙︎</div>
   <div class="chip glass btn" id="sndBtn" title="Sound">🔊</div>
 </div>
@@ -233,6 +234,9 @@ body.intro #top,body.intro #where,body.intro #obj,body.intro #mini,body.intro #h
 <div id="wvLabels"></div>
 <div id="sheet" class="lg" hidden role="dialog" aria-label="Details"></div>
 <div id="placeTitle" aria-live="polite"></div>
+<button id="camReset" class="lg" aria-label="Reset camera" title="Reset camera"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></button>
+<div id="guidePill" class="lg" hidden><span class="nova-dot"></span><span id="guideTxt"></span><button id="guideX" aria-label="Stop guidance">✕</button></div>
+<div id="panel" hidden role="dialog"></div>
 <div id="hintChip" class="lg" hidden><span id="hintTxt"></span><button aria-label="Dismiss hint" id="hintX">✕</button></div>
 <div id="settings"></div>
 <script type="module" src="world/main.js"></script>

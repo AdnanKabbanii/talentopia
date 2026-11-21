@@ -32,6 +32,7 @@ export function openSettings(s, { isPhone, onChange, speech, fpsNow }) {
         ${Object.entries(PRESETS).map(([k, p]) => opt(k, p.label, p.note)).join('')}</div>
       <div class="set-note">Now running at about <b>${Math.round(fpsNow() || 0)} fps</b>.</div>
       <h4>Accessibility</h4>
+      <label class="set-tog" style="display:block"><b>Camera sensitivity</b><input type="range" min="0.4" max="2" step="0.1" value="${s.camSens || 1}" data-r="camSens" style="width:100%;accent-color:#8D70FF" aria-label="Camera sensitivity"></label>
       ${tog('reduceMotion', 'Reduce motion', 'Calmer camera: no speed zoom, no body lean, a still view behind the start screen.', s.reduceMotion)}
       ${tog('largeText', 'Larger text', 'Bigger text in panels, subtitles and buttons.', s.largeText)}
       ${tog('contrast', 'High-contrast panels', 'Solid panel backgrounds and stronger outlines.', s.contrast)}
@@ -40,6 +41,7 @@ export function openSettings(s, { isPhone, onChange, speech, fpsNow }) {
     </div>`;
     box.querySelector('.set-x').onclick = close;
     box.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { s.preset = b.dataset.p; saveSettings(s); onChange(s); render(); });
+    box.querySelectorAll('[data-r]').forEach(r => r.oninput = () => { s[r.dataset.r] = +r.value; saveSettings(s); });
     box.querySelectorAll('[data-t]').forEach(c => c.onchange = () => { const k = c.dataset.t; if (k === 'voice') speech.setEnabled(c.checked); else { s[k] = c.checked; saveSettings(s); onChange(s); } });
     box.querySelector('.set-x').focus();
   };

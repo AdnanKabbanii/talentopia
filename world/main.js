@@ -14,6 +14,9 @@ import { buildStreets, buildPlaza, buildMonorail, buildNav, findPath, nearestSid
 import { buildDistricts, DISTRICTS, PLAZA, districtAt } from './districts.js';
 import { furnish, furnishHospital, CAREERS } from './interiors.js';
 import { WorldView } from './worldview.js';
+import { buildCityHall } from './cityhall.js';
+import { openPanel, closePanel, panelOpen, openPassport, openNova, openEvents, CURIOUS, TRAIL } from './panels.js';
+import { ACTIVITIES } from './activities.js';
 import { loadModel, Character } from './characters.js';
 import { createUI } from './ui.js';
 import { loadLandmarks, loadHospitalUpgrade } from './landmarks.js';
@@ -126,9 +129,11 @@ buildMonorail(ctx);
 buildSignals(ctx);
 buildBackdrop(ctx);
 buildDistricts(ctx);
+const cityHall = buildCityHall(ctx, plaza.P); ctx.featured.push(cityHall.featured);
 const FEATURED = ctx.featured; // [{id,name,district,x0,x1,z0,z1,entrance,inside,face,...}]
 const STATIONS = [], PROS = [];
-for (const f of FEATURED) { const r = furnish(ctx, f); STATIONS.push(...r.stations); PROS.push(...r.npcs); }
+for (const f of FEATURED) { if (f.id === 'cityhall') continue; const r = furnish(ctx, f); STATIONS.push(...r.stations); PROS.push(...r.npcs); }
+STATIONS.push(...cityHall.stations);
 ctx.batch.flush(scene); ctx.inst.flush(scene);
 
 // spatial hash for colliders + floors
@@ -211,7 +216,9 @@ gltfLoader.load('assets/medcity/medcity.glb', g => {
 }
 const hospitalWaiters = []; const whenHospital = f => hospital.ready ? f() : (hospitalWaiters.push(f), loadHospital());
 let heart = null, heartParts = [];
-function loadHeart() { if (loadHeart.started) return; loadHeart.started = true; gltfLoader.load('assets/medcity/heart.glb', h => { heart = h; if (hospital.ready) setupHeart(); }); }
+function loadHeart() { if (loadHeart.started) return; loadHeart.started = true; gltfLoader.load('assets/medcity/heart.glb', h => { heart = h; if (hospital.ready) setupHeart();
+  // someone is waiting at the Heart Lab: open it now if they are still there
+  const st = STATIONS.find(s => s.id === 'heartlab'); if (openLab.pending && performance.now() - openLab.pending < 30000 && mode === 'walk' && st && Math.hypot(P.pos.x - st.x, P.pos.z - st.z) < 4) openLab(); openLab.pending = 0; }); }
 
 // ------------------------------------------------------------------ doors (city + hospital)
 function updateDoors(dt) {
@@ -275,10 +282,12 @@ addEventListener('keydown', e => {
   if (k === 'r' && mode === 'walk') { autoRun = !autoRun; ui.toast(autoRun ? 'Auto-run on (R to stop)' : 'Auto-run off'); }
   if (k === 'v' && mode === 'walk') { walkMode = !walkMode; ui.toast(walkMode ? 'Walking pace' : 'Jogging pace'); }
   if (wv.key(k)) { e.preventDefault(); return; }
+  if (k === 'escape' && panelOpen()) { closePanel(); return; }
+  if (k === 'n' && mode === 'walk') { nova(); return; }
   if (k === 'm' && mode === 'walk') openWorldView();
   else if (k === 'm' && mode === 'world') wv.close();
   if (k === ' ' && mode === 'talk') conv.skip();
-  if (k === 'escape') { if (mode === 'lab') closeLab(); else if (mode === 'talk') conv.end(); else if (mode === 'studio') { studio.save(); studio.close(); returnFromStudio(); } else ui.closeAll(); }
+  if (k === 'escape') { openLab.pending = 0; if (mode === 'lab') closeLab(); else if (mode === 'talk') conv.end(); else if (mode === 'studio') { studio.save(); studio.close(); returnFromStudio(); } else ui.closeAll(); }
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { P.route = []; P.routeCb = null; }
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -455,7 +464,7 @@ canvas.addEventListener('pointermove', e => {
   if (drag && drag.id === e.pointerId) {
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved += Math.abs(dx) + Math.abs(dy); drag.x = e.clientX; drag.y = e.clientY;
     if (mode === 'lab') { labOrbit.yaw -= dx * 0.008; labOrbit.pitch = THREE.MathUtils.clamp(labOrbit.pitch + dy * 0.006, -1.2, 1.2); }
-    else { camYaw -= dx * 0.0055; camPitch = THREE.MathUtils.clamp(camPitch + dy * 0.004, -0.15, 1.25); lastLook = performance.now() / 1000; }
+    else { const cs = settings.camSens || 1; camYaw -= dx * 0.0055 * cs; camPitch = THREE.MathUtils.clamp(camPitch + dy * 0.004 * cs, -0.15, 1.25); lastLook = performance.now() / 1000; }
   } else hover(e);
 });
 canvas.addEventListener('pointerup', e => { if (drag && drag.moved < 6) click(e); drag = null; });
@@ -502,17 +511,26 @@ function click(e) {
 const nav = buildNav();
 function walkTo(t, cb) {
   const sameBuilding = P.inside && P.inside.x0 <= t.x && t.x <= P.inside.x1 && P.inside.z0 <= t.z && t.z <= P.inside.z1;
-  const direct = sameBuilding || Math.hypot(t.x - P.pos.x, t.z - P.pos.z) < 18;
+  // target inside a building you are not in: go to its entrance first, then through the door, then to the spot
+  const tb = !sameBuilding && FEATURED.find(f => t.x > f.x0 && t.x < f.x1 && t.z > f.z0 && t.z < f.z1 && f.entrance);
+  if (tb && !t.viaDoor) { const e = tb.entrance, i = tb.inside || { x: (tb.x0 + tb.x1) / 2, z: (tb.z0 + tb.z1) / 2 };
+    return walkTo({ x: e.x, z: e.z, viaDoor: true }, () => { P.route = [{ x: e.x + (i.x - e.x) * 0.4, z: e.z + (i.z - e.z) * 0.4 }, { x: i.x, z: i.z }]; P.routeCb = () => walkTo({ x: t.x, z: t.z, viaDoor: true }, cb); }); }
+  const inPlaza = q => Math.abs(q.x) < 36 && Math.abs(q.z) < 36; // the plaza is open ground: walk straight across it
+  const direct = sameBuilding || Math.hypot(t.x - P.pos.x, t.z - P.pos.z) < 18 || (inPlaza(t) && inPlaza(P.pos) && !P.inside);
   let pts = [];
   if (!direct) {
     if (P.inside) { if (P.inside.id === 'hospital' && P.pos.z < HOSP.oz - 40) pts.push({ x: HOSP.ox + 7.5, z: HOSP.oz - 42.4 }, { x: HOSP.ox + 7.5, z: HOSP.oz - 37.6 });
       pts.push({ x: P.inside.inside ? P.inside.inside.x : P.pos.x, z: P.inside.inside ? P.inside.inside.z : P.pos.z }, { x: P.inside.entrance.x, z: P.inside.entrance.z }); }
     const from = pts.length ? pts[pts.length - 1] : P.pos;
-    pts.push(...findPath(nav, from.x, from.z, t.x, t.z));
+    if (inPlaza(t)) { pts.push(...findPath(nav, from.x, from.z, 0, 46), { x: 0, z: 40 }, { x: 0, z: 30 }, { x: t.x, z: t.z }); } // enter by the south ramp
+    else pts.push(...findPath(nav, from.x, from.z, t.x, t.z));
   } else {
     // hospital: lobby and Anatomy Lab are separated by a partition with a doorway (local x 7.5, z -40)
     const hz = HOSP.oz - 40, inH = (q) => q.x > HOSP.ox - 30 && q.x < HOSP.ox + 30 && q.z > HOSP.oz - 54 && q.z < HOSP.oz - 24;
     if (inH(P.pos) && inH(t) && (P.pos.z - hz) * (t.z - hz) < 0) { const a = { x: HOSP.ox + 7.5, z: HOSP.oz - 37.6 }, b = { x: HOSP.ox + 7.5, z: HOSP.oz - 42.4 }; if (P.pos.z > hz) pts.push(a, b); else pts.push(b, a); }
+    // go around the plaza fountain (centre 0,8, radius 9) instead of into it
+    const segD = (ax, az, bx, bz, px, pz) => { const dx = bx - ax, dz = bz - az, l = dx * dx + dz * dz || 1, u = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l)); return Math.hypot(ax + dx * u - px, az + dz * u - pz); };
+    if (inPlaza(t) && inPlaza(P.pos) && segD(P.pos.x, P.pos.z, t.x, t.z, 0, 8) < 10.5) { const sx = (P.pos.x + t.x) >= 0 ? 1 : -1, south = P.pos.z > 8; pts.push({ x: sx * 12.5, z: south ? 18 : -2 }, { x: sx * 12.5, z: south ? -2 : 18 }); }
     pts.push({ x: t.x, z: t.z });
   }
   P.route = pts; P.routeCb = cb || null;
@@ -526,7 +544,8 @@ function enterBuilding(f) { // walk through the door to the inside point
   P.route = [{ x: e.x + (i.x - e.x) * 0.35, z: e.z + (i.z - e.z) * 0.35 }, { x: i.x, z: i.z }]; P.routeCb = null;
 }
 function onEnterBuilding(f) {
-  if (f) { ui.setWhere(f.name, DISTRICTS.find(d => d.id === f.district)?.color || '#8056F6'); event('enter:' + f.id); ui.toast(`Inside ${f.name}`); }
+  if (f) { ui.setWhere(f.name, DISTRICTS.find(d => d.id === f.district)?.color || '#8056F6'); event('enter:' + f.id); ui.toast(`Inside ${f.name}`);
+    progress.visited = progress.visited || {}; if (!progress.visited[f.id]) { progress.visited[f.id] = new Date().toISOString().slice(0, 10); store(); } track('enter', { building: f.id }); }
 }
 function travelTo(f) { // map fast travel: same avatar, same progress, arrive at the entrance outside
   ui.closeMap(); const fade = $('fade'); fade.style.opacity = 1;
@@ -602,6 +621,9 @@ function runAction(s) {
   if (s.action === 'hosp:lab') { player.play('Interact', { lock: true, then: () => openLab() }); return; }
   if (s.action.startsWith('mission:')) { const id = s.action.slice(8); player.play('Interact', { lock: true }); ui.mission(id, (res) => { if (res && res.done) event('mission:' + id); }); }
   if (s.action.startsWith('career:')) { ui.careers(s.action.slice(7)); }
+  if (s.action.startsWith('ch:')) { const a = s.action.slice(3); // City Hall
+    if (a === 'world') openWorldView(); if (a === 'nova') nova(); if (a === 'passport') passport(); if (a === 'studio') openAvatarStudioInWorld();
+    if (a === 'start') nova('curious'); if (a === 'learn') passport('learning'); if (a === 'events') { openEvents(); panelMode(); } }
   if (s.action.startsWith('act:')) {
     const id = s.action.slice(4);
     const stand = () => { if (P.seated) { P.seated = false; player.sitDown(false); P.pos.set(s.x, P.pos.y, s.z); } };
@@ -630,21 +652,26 @@ const OBJ = [
   { t: 'Explore another district (M for the map)', ev: 'never', target: () => null }];
 let objIdx = progress.flags.objIdx || 0;
 function event(ev) {
+  if (ev.startsWith('act:') || ev.startsWith('mission:')) { track('complete', { id: ev });
+    if (DEMO && !event.demoNext) { event.demoNext = true; guideTo(null); const wait = setInterval(() => { if (mode === 'walk') { clearInterval(wait); setTimeout(() => nova('curious'), 600); } }, 500); } }
+  if (progress.trail != null && TRAIL[progress.trail] && TRAIL[progress.trail].ev === ev) setTimeout(() => trailStep(progress.trail + 1), 600);
   if (objIdx < OBJ.length && OBJ[objIdx].ev === ev) { objIdx++; progress.flags.objIdx = objIdx; store(); ui.renderObjectives(OBJ, objIdx); if (objIdx < OBJ.length) ui.toast('✓ Next: ' + OBJ[objIdx].t); }
 }
 const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 40, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x51c9e8, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(beacon);
-function updateBeacon(t) { const o = OBJ[objIdx]; const p = o && o.target && o.target(); beacon.visible = !!p && mode !== 'lab'; if (p) { beacon.position.set(p.x, 20, p.z); beacon.material.opacity = 0.18 + 0.1 * Math.sin(t * 3); } }
+function updateBeacon(t) { if (guide && !guide.trail && player && Math.hypot(guide.target.x - P.pos.x, guide.target.z - P.pos.z) < 7) { guideTo(null); ui.toast('You’ve arrived'); }
+  const o = OBJ[objIdx]; const p = guide ? guide.target : o && o.target && o.target(); beacon.visible = !!p && mode !== 'lab'; if (p) { beacon.position.set(p.x, 20, p.z); beacon.material.opacity = 0.18 + 0.1 * Math.sin(t * 3); } }
 
 // ------------------------------------------------------------------ professional NPCs + pedestrians
 const PRO_CHARS = []; const peds = [];
 let prosSpawned = 0, peopleStarted = false;
+const liteModel = m => presetName !== 'light' ? m : /f1|f2|receptionist|visitor_f/.test(m) ? 'visitor_f' : 'visitor_m';
 function spawnPros() {
   // named staff get the V2 morph-target avatar (faces, blinking, lip sync); extras keep the lighter fixed models
   const queue = []; const list = PROS.slice(prosSpawned); prosSpawned = PROS.length;
   for (const p of list) { const n = { ...p }; PRO_CHARS.push(n);
     const cast = CAST[p.role]; if (cast) { queue.push(n); continue; }
-    spawnChar(p.model).then(c => { n.c = c; c.root.position.set(p.x, p.y ?? 0.15, p.z); c.root.rotation.y = p.ry; n.baseRy = p.ry;
+    spawnChar(liteModel(p.model)).then(c => { n.c = c; c.root.position.set(p.x, p.y ?? 0.15, p.z); c.root.rotation.y = p.ry; n.baseRy = p.ry;
       c.idleClip = p.idle || ['Idle', 'FoldArms', 'Idle'][PRO_CHARS.indexOf(n) % 3]; if (!c.acts[c.idleClip]) c.idleClip = 'Idle';
       if (p.sit) { c.sitDown(true); c.sit = 1; c.sitClip = Math.random() < 0.5 ? 'SitTalk' : 'SitIdle'; } }).catch(() => {}); }
   (async () => { // one at a time, nearest first, so loading never stalls a frame for long
@@ -656,7 +683,10 @@ async function spawnPeople() {
   peopleStarted = true; spawnPros();
   // pedestrians on sidewalk loops around busy blocks
   const loops = [[0, 0, 2], [-130, -130, 2], [0, -130, 2], [130, -130, 1], [-130, 0, 1], [130, 0, 1], [0, 130, 1], [-130, 130, 1], [130, 130, 1]];
-  const models = ['visitor_m', 'visitor_f', 'avatar_m1', 'avatar_f2', 'doctor', 'avatar_m2', 'receptionist', 'avatar_f1'].filter(m => m !== chosen);
+  // Light preset (phones): two pedestrian models instead of eight (~5 MB instead of ~19 MB) and fewer walkers
+  const lite = presetName === 'light';
+  const models = lite ? ['visitor_m', 'visitor_f'] : ['visitor_m', 'visitor_f', 'avatar_m1', 'avatar_f2', 'doctor', 'avatar_m2', 'receptionist', 'avatar_f1'].filter(m => m !== chosen);
+  if (lite) loops.forEach(l => { l[2] = 1; });
   let k = 0;
   for (const [cx, cz, n] of loops) {
     const pts = roundLoop(blockLoop(cx, cz), 2.5); const pl = polyline(pts);
@@ -768,7 +798,8 @@ function setupHeart() {
 }
 const labOrbit = { yaw: 0, pitch: 0.1, dist: 1.9 };
 function openLab() {
-  if (!heartPivot) { loadHeart(); setupHeart(); if (!heartPivot) { ui.toast('Preparing the 3D heart…'); return; } }
+  if (!heartPivot) { loadHeart(); setupHeart(); if (!heartPivot) { ui.toast('Preparing the 3D heart…'); openLab.pending = performance.now(); return; } }
+  openLab.pending = 0;
   mode = 'lab'; event('lab:open'); ui.heart.open(() => closeLab(), (score, max) => { event('mission:med_heart'); });
 }
 function closeLab() { mode = 'walk'; ui.heart.close(); paintParts(null, null); }
@@ -791,8 +822,54 @@ $('mapBtn').onclick = () => { if (mode === 'walk') openWorldView(); };
 // ------------------------------------------------------------------ V3 World View + floating navigation
 const wv = new WorldView({ camera, scene, renderer, canvas, ctx, DISTRICTS, CAREERS, sun, FEATURED: () => FEATURED, STATIONS: () => STATIONS,
   playerPos: () => player ? P.pos : null, setMode: m => { mode = m; }, getMode: () => mode,
-  walkTo: f => { if (f) goToBuilding(f); }, travelTo: f => { if (f) { whenHospital(() => {}); travelTo(f); } }, onClose: () => setNav('explore') });
-function openWorldView() { if (!player || intro) return; ui.closeAll(); if (conv.active) conv.end(); $('hintChip').hidden = true; P.route = []; P.speed = 0; setNav('world'); wv.open(); }
+  walkTo: f => { if (f) goToBuilding(f); }, travelTo: f => { if (f) { whenHospital(() => {}); travelTo(f); } }, onClose: () => setNav('explore'),
+  isSaved: id => !!(progress.saved && progress.saved[id]), toggleSave: id => { progress.saved = progress.saved || {}; if (progress.saved[id]) delete progress.saved[id]; else progress.saved[id] = 1; store(); return !!progress.saved[id]; } });
+// ------------------------------------------------------------------ V3 panels: Passport, NOVA guide, guided routes, analytics hook
+const DEMO = /[?&]demo=1/.test(location.search) || location.pathname.replace(/\/$/, '') === '/demo';
+const CAMPAIGN = (() => { const q = new URLSearchParams(location.search), o = {}; for (const k of ['utm_source', 'utm_medium', 'utm_campaign']) if (q.get(k)) o[k] = q.get(k).slice(0, 40); return o; })();
+// Privacy-respecting analytics integration point: events are aggregated counts only (no names, no avatar, no location history).
+// It does nothing until window.TALENTOPIA_ANALYTICS(event, data) is provided by an approved analytics service.
+function track(ev, data = {}) { try { if (typeof window.TALENTOPIA_ANALYTICS === 'function') window.TALENTOPIA_ANALYTICS(ev, { ...data, ...CAMPAIGN, demo: DEMO }); } catch (e) {} }
+track('visit');
+function panelMode() { if (mode === 'walk') mode = 'panel'; }
+const panelClosed = () => { if (mode === 'panel') mode = 'walk'; setNav('explore'); };
+function passport(tab) {
+  if (!player) return; ui.closeAll(); if (wv.active) return wv.close(() => passport(tab)); setNav('passport');
+  openPassport({ progress, store, ACTIVITIES, FEATURED, DISTRICTS, CAREERS, portrait: progress.portrait, onClose: panelClosed,
+    onGo: fid => { const f = FEATURED.find(x => x.id === fid); if (f) { mode = 'walk'; whenHospital(() => travelTo(f)); } }, onAvatar: () => { mode = 'walk'; openAvatarStudioInWorld(); } }, tab);
+  panelMode();
+}
+function nova(view) {
+  if (!player) return; ui.closeAll(); if (wv.active) return wv.close(() => nova(view)); if (conv.active) conv.end();
+  openNova({ touch: isTouch, onClose: panelClosed, passport: () => { mode = 'walk'; passport(); }, world: () => { mode = 'walk'; openWorldView(); },
+    explore: c => { mode = 'walk'; openWorldView(); setTimeout(() => wv.focusDistrict(c[2]), 900); const f = FEATURED.find(x => x.id === c[3]); if (f) guideTo(f.entrance, `NOVA: head to ${f.name}`); },
+    trail: () => { mode = 'walk'; trailStep(0); }, demoFirst: DEMO ? () => { mode = 'walk'; demoFirst(); } : null }, view);
+  panelMode();
+}
+// guided target (NOVA routes, discovery trail): a beacon plus a small pill you can dismiss
+let guide = null;
+function guideTo(target, text) { guide = target ? { target, text } : null; const g = $('guidePill'); if (!guide) { g.hidden = true; return; } $('guideTxt').textContent = text; g.hidden = false; }
+$('guideX').onclick = () => { progress.trail = null; store(); guideTo(null); };
+function trailStep(i) {
+  const t = TRAIL[i]; if (!t) { progress.trail = null; store(); guideTo(null); ui.toast('Discovery Trail complete! Open your Passport to see what you tried.'); return; }
+  progress.trail = i; store(); const st = STATIONS.find(s => s.id === t.st) || null;
+  const go = () => { const s2 = STATIONS.find(s => s.id === t.st); if (s2) { guideTo({ x: s2.x, z: s2.z }, `Discovery Trail ${i + 1}/3 · ${t.t}`); guide.trail = true; } };
+  if (t.b === 'hospital') whenHospital(go); else go();
+  ui.toast(`Discovery Trail ${i + 1}/3: ${t.t}`);
+}
+// demo mode: the first meaningful career action in about a minute
+function demoFirst() {
+  track('demo_first'); ui.toast('Taking you to MedCity: sort today’s patients by urgency');
+  whenHospital(() => { const st = STATIONS.find(s => s.id === 'hosp_triage'); const fade = $('fade'); fade.style.opacity = 1; // fade straight to the triage desk
+    setTimeout(() => { P.pos.set(st.x + 1.2, P.pos.y, st.z + 1.6); P.pos.y = groundAt(P.pos.x, P.pos.z, 1); P.route = []; P.speed = 0; P.yaw = Math.atan2(st.x - P.pos.x, st.z - P.pos.z); camYaw = P.yaw + Math.PI;
+      if (player) player.root.position.copy(P.pos); camTarget.set(P.pos.x, P.pos.y + 1.55, P.pos.z); setTimeout(() => { fade.style.opacity = 0; runAction(st); }, 250); }, 420); });
+}
+$('novaBtn').onclick = () => nova();
+$('camReset').onclick = () => { resetCamera(); ui.toast('Camera reset'); };
+$('passBtn').onclick = () => passport(); // the summary card's "Open Passport" button reuses this
+function capturePortrait() { try { if (avatarChar && studio.char) { studio.scene.environment = scene.environment; progress.portrait = studio.snapshot(240); store(); } } catch (e) {} }
+ctx.cityHallNear = (x, z) => { for (const c of movers()) if (Math.hypot(c.x - x, c.z - z) < 5) return true; return false; };
+function openWorldView() { if (!player || intro) return; ui.closeAll(); closePanel(); $('placeTitle').classList.remove('on'); if (conv.active) conv.end(); $('hintChip').hidden = true; P.route = []; P.speed = 0; setNav('world'); wv.open(); }
 function setNav(k) { document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === k)); }
 function resetCamera() { camYaw = P.yaw + Math.PI; camPitch = 0.32; camDist = 6.2; lastLook = -10; }
 function openAvatarStudioInWorld() {
@@ -801,12 +878,12 @@ function openAvatarStudioInWorld() {
   studio.scene.environment = scene.environment; mode = 'studio'; setNav('avatar');
   studio.open('full', { enterLabel: 'Back to the city' });
 }
-function returnFromStudio() { useCustomAvatar(); player.root.position.copy(P.pos); player.root.rotation.y = P.yaw; mode = 'walk'; setNav('explore'); resetCamera(); }
+function returnFromStudio() { capturePortrait(); useCustomAvatar(); player.root.position.copy(P.pos); player.root.rotation.y = P.yaw; mode = 'walk'; setNav('explore'); resetCamera(); }
 document.querySelectorAll('#nav [data-nav]').forEach(b => b.onclick = () => {
   const k = b.dataset.nav; if (!player) return;
   if (k === 'explore') { if (wv.active) return wv.close(); ui.closeAll(); if (conv.active) conv.end(); resetCamera(); setNav('explore'); }
   if (k === 'world') { if (wv.active) wv.fit(); else openWorldView(); }
-  if (k === 'passport') { if (wv.active) wv.close(() => $('passBtn').onclick()); else { ui.closeAll(); $('passBtn').onclick(); } }
+  if (k === 'passport') passport();
   if (k === 'avatar') openAvatarStudioInWorld();
 });
 $('mini').onclick = () => { if (mode === 'walk') ui.openMap(mapData()); };
@@ -848,12 +925,17 @@ function checkReady() {
   loadHospital(); // next priority: the nearest featured building
 }
 // ------------------------------------------------------------------ V3 onboarding: guest entry, ready-made avatar, returning visitors
-const returning = !!(progress.avatarV2 || progress.world);
+const returning = !DEMO && !!(progress.avatarV2 || progress.world);
 if (returning) { $('obWelcome').hidden = true; $('obBack').hidden = false; const n = Object.keys(progress.shifts || {}).length + (progress.done || []).length;
   $('obBackSub').textContent = progress.xp ? `${progress.xp} XP earned so far. Your avatar and progress are saved on this device.` : 'Your avatar and progress are saved on this device.'; }
 setTimeout(() => { if (!isReady && !loadParts.sky) $('overlay').classList.add('live'); }, 9000); // never leave the poster up forever
+setTimeout(function slow() { if (isReady) return; // slow connection: say so, and let people in once their avatar is ready
+  $('loadTxt').innerHTML = 'Slow connection: still loading the city… <button class="linkbtn" id="enterNow">Enter now</button>';
+  const b = $('enterNow'); if (b) b.onclick = () => { if (!loadParts.avatar) { b.textContent = 'Waiting for your avatar…'; return; } loadParts.sky = loadParts.landmarks = 1; checkReady(); };
+  setTimeout(() => { if (!isReady) { $('err').style.display = 'block'; $('err').innerHTML = 'The city is taking a long time to load. <button class="linkbtn" onclick="location.reload()">Retry</button>'; } }, 40000);
+}, 20000);
 const openStudio = (m, dest) => { if (!avatarChar) return enterWorld(dest); pendingDest = dest; studio.scene.environment = scene.environment; studio.open(m, { onSkip: () => { studio.close(); enterWorld(dest); } }); };
-$('go').onclick = () => progress.avatarV2 ? enterWorld('plaza') : openStudio('quick', 'plaza');
+$('go').onclick = () => progress.avatarV2 || DEMO ? enterWorld('plaza') : openStudio('quick', 'plaza');
 $('goMed').onclick = () => enterWorld('hospital');
 $('studioBtn').onclick = () => openStudio('full', 'plaza');
 $('goContinue').onclick = () => enterWorld('saved');
@@ -866,7 +948,9 @@ async function enterWorld(dest = 'plaza') {
   try {
     progress.avatar3d = chosen; store();
     const ac = await avatarReady; studio.close();
-    player = ac ? useCustomAvatar() : await spawnChar(chosen); player.noLean = !!settings.reduceMotion;
+    if (DEMO && !progress.avatarV2 && ac) { const { READY, DEFAULT } = await import('./avatar.js'); await avatar.setCfg({ ...DEFAULT, ...READY[Math.random() * READY.length | 0].cfg }); studio.applyHeight(); }
+    if (ac) capturePortrait();
+    player = ac ? useCustomAvatar() : await spawnChar(chosen); player.noLean = !!settings.reduceMotion; track('enter_world', { dest });
     const w = progress.world, savedOk = w && w.x > CITY.minX && w.x < CITY.maxX && w.z > CITY.minZ && w.z < CITY.maxZ;
     if ((dest === 'saved' || dest === 'world') && savedOk) { P.pos.set(w.x, w.y || 0, w.z); P.yaw = w.yaw || 0; }
     else { P.pos.set(plaza.spawn.x, plaza.P, plaza.spawn.z); P.yaw = plaza.spawn.ry; }
@@ -882,7 +966,9 @@ async function enterWorld(dest = 'plaza') {
     intro.done = () => {
       placeTitle(dest === 'hospital' ? 'MedCity' : returning ? 'Welcome back' : 'Welcome to Talentopia', dest === 'hospital' ? 'Medicine & health' : 'Talent City');
       if (dest === 'world' && typeof openWorldView === 'function') setTimeout(() => openWorldView(), 400);
+      else if (DEMO) setTimeout(() => nova(), 1800);
       else setTimeout(showHint, 2600);
+      if (progress.trail != null) setTimeout(() => trailStep(progress.trail), 3000);
     };
   } catch (e) { fail('Could not load your avatar: ' + e.message + '. Check your connection and try again.'); for (const id of ['go', 'goContinue']) $(id).disabled = false; }
 }
@@ -901,7 +987,7 @@ const clock = new THREE.Clock(); let elapsed = 0, lastWhere = '', frames = 0, fp
 function step(dtOverride) {
   const dt = dtOverride || Math.min(clock.getDelta(), 1 / 20); elapsed += dt;
   if (studio.active) { studio.render(dt); return; }
-  updatePlayer(dt); conv.update(dt); staging.update(dt); updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
+  updatePlayer(dt); conv.update(dt); staging.update(dt); { const mv = P.speed > 0.1 || joy.on; if (mv !== step.mv) { step.mv = mv; document.body.classList.toggle('moving', mv); } } updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
   WIND.value = elapsed;
   for (const f of ctx.animated) f(elapsed, dt);
   updatePrompt(); updateBeacon(elapsed);
@@ -942,4 +1028,4 @@ function frame() { perfTick(); try { step(); } catch (e) { if ((frame.errs = (fr
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, wv, openWorldView, enterWorld, settings, applySettings, get preset() { return presetName; }, perf, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, wv, openWorldView, enterWorld, passport, nova, trailStep, get guide() { return guide; }, progress, settings, applySettings, get preset() { return presetName; }, perf, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };

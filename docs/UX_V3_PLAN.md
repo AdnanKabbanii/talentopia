@@ -40,15 +40,73 @@
 - **Search**: careers and keywords ("doctor", "banking", "chef", "engineer") lead to the right workplace. Picking a result flies the camera there.
 - **Comfort**: the camera moves on real time, the bottom or side sheet never covers the focused building, and fog and shadows follow the aerial view.
 
-## Stage 4 (started): mobile UI
-- **Navigation bar**: a floating glass bar with **Explore · World View · Passport · Avatar**. Settings and sound stay as small top-right buttons, and the old top chips are hidden.
-- **Touch controls**: a translucent joystick, with the controls raised above the nav bar.
-- **Objectives and prompts**: on phones the objectives card is a compact pill at the top, and building prompts are two-line glass cards ("Talentopia Central Bank / Enter") with a Tap or E key.
-- **Safe areas**: safe-area insets (`viewport-fit=cover`) are respected throughout.
+## Stage 4: mobile-first interface (done)
+- **Navigation bar**: a floating glass bar with **Explore · World View · Passport · Avatar**. Settings, sound and **NOVA** are small top-right buttons, and a **camera-reset** button sits beneath them.
+- **One glass language**: dialogs, conversation subtitles, the completion card, toasts, chips and the location label all share the liquid-glass style.
+  - On phones, dialogs and conversations become full-width bottom sheets.
+  - Every Passport, NOVA, learning and events panel is a swipe-to-dismiss bottom sheet on phones and a side card on desktop.
+- **Touch controls**: a translucent joystick and buttons sit above the nav bar and fade slightly when idle (never disappearing).
+- **Prompts**: building prompts are two-line glass cards, for example "Talentopia Central Bank / Enter", with a Tap or E key.
+- **Guided route**: shown as a single pill with the current step.
+- **Landscape phones**: the nav becomes a vertical rail on the right, sheets dock to the right, and the onboarding and studio adapt.
+- **Settings**: a **camera sensitivity** slider, plus the existing reduce motion, larger text, high contrast and voices. Esc closes any panel.
+- **Routing fixes**: walking to a spot inside a building now always goes through its entrance (it used to try straight through walls when under 18 m). The plaza is walked straight across, around the fountain, and is entered from the south ramp.
 
-## Remaining stages
-4. **Mobile UI**: bottom sheets for mission and career info, a camera-reset button, landscape tuning, and camera-sensitivity settings.
-5. **Avatar Studio and Career Passport**: visual thumbnails for hair and outfits, and a full Passport redesign (journey, skills, badges, careers, learning).
-6. **City Hall**: the central welcome building with a lobby city model that opens World View, using the logo placeholder.
-7. **Guided exploration**: Help Me Explore, the NOVA guide, and a Career Discovery Trail.
-8. **Testing and optimisation**: demo mode (`?demo=1`, with campaign parameters), network throttling, real devices, a mobile asset diet (pedestrian models are about 19 MB), and analytics only if approved.
+## Stage 5: Avatar Studio and Career Passport (done)
+- **Career Passport** (`world/panels.js`):
+  - **Header**: the avatar portrait (rendered from your own 3D avatar each time you enter or change it), an editable display name ("Guest Explorer" by default), XP, a level with a title and progress bar, careers explored, missions and badges.
+  - **My Journey**: a timeline in district colours. Tap an entry for the badge, the skills practised, the result and "Go back".
+  - **My Skills**: nine skills, each shown as evidence (which experiences practised it) with no invented levels.
+  - **Achievements**: medallion badges with district, date, activity and XP.
+  - **My Careers**: all ten districts marked as explored, visited or not explored yet, with careers saved in World View (♡ Save this career) and a Go button.
+  - **My Learning**: Master Your Future (Journey B). Pick an academic field and see that field's practice simulations and your progress. Course upload is an honest "coming soon".
+- **Avatar Studio**:
+  - Tabs follow the requested order: Face, Hair, Skin & eyes, Body, Outfit, Accessories.
+  - Hairstyles and outfits are **picture thumbnails rendered from the real 3D parts** (`assets/ui/studio/`), and skin tones are large swatches.
+  - **Back**, **Save** and **Back to the city** (or **Enter Talent City**) buttons.
+  - The studio opens from the nav bar, City Hall or the Passport.
+  - Eye height is now measured in the bind pose, so framing and portraits are right for every body shape.
+
+## Stage 6: Talentopia City Hall (done)
+`world/cityhall.js`: the glass ground floor of Talentopia Tower at Central Plaza becomes an enterable building.
+- **Entrance**: a ramp from the plaza, automatic doors, and "TALENTOPIA CITY HALL" signs inside and out using the logo placeholder.
+- **Lobby**: frosted glass lining, a ceiling with a light cove, a gold floor inlay and planters.
+- **Interactive objects**:
+  - A **live miniature city model**, built from the real building footprints, that opens World View.
+  - **NOVA**, a floating holographic guide orb.
+  - A **Career Passport kiosk**.
+  - An **Avatar Studio booth** with an arch and a mirror.
+  - A **Start here** board that opens Help Me Explore.
+  - A **Master Your Future** wall for university learning.
+  - A **Career events** board. It shows an honest "none scheduled yet" list, ready for open days, fairs, workshops, ambassador sessions and consultations.
+
+## Stage 7: guided exploration (done)
+- **NOVA** is a scripted guide, opened from the top-bar button, the N key or City Hall. It never interrupts on its own, except to offer help once in demo mode.
+  - **Help me explore** asks "What are you curious about?". Picking medicine, business, technology, design, engineering or food opens World View on that district and sets a guidance beacon and pill towards its main workplace. The guidance clears when you arrive.
+  - **I'm not sure yet** starts a three-stop **Career Discovery Trail**: hospital triage, then currency exchange at the bank, then the agency campaign budget. Each stop advances when you finish its activity, and the trail resumes on your next visit.
+  - It also answers "How do I move around?" (touch or keyboard version), "What is the Career Passport?", and offers "Show me the whole city".
+- Free exploration stays possible at any time.
+
+## Stage 8: presentation, performance and recovery (done)
+- **Demo mode**: `talentopia.vercel.app/demo` (Vercel rewrite) or `?demo=1`.
+  - No returning-visitor screen, and no avatar step (a random ready-made avatar is assigned).
+  - After the entry title NOVA offers **Try a career in one minute**, which fades straight to Grace's triage desk.
+  - Measured in the preview pane: **7.2 s from Enter to the first career activity**.
+  - After completing it, NOVA asks what to try next.
+- **Presenter QR page**: `/qr`. A large QR code points to the stable production path `https://talentopia.vercel.app/demo?utm_source=qr&utm_medium=presentation&utm_campaign=classroom`.
+  - Use `?campaign=` for a different event, or `?target=` for rehearsals on a preview.
+  - The QR destination only works after the redesign is released to production; until then `/demo` serves the current live site.
+- **Analytics integration point**: `track()` sends aggregated events (visit, enter_world, enter, complete, demo_first, plus campaign tags and the demo flag) only if an approved `window.TALENTOPIA_ANALYTICS` is provided. It sends no names, avatars or location history, and is not connected yet.
+- **Slow networks**:
+  - After 20 s, "Slow connection: still loading the city…" appears with **Enter now** (enter as soon as the avatar is ready while the city keeps streaming).
+  - After 60 s, a **Retry** option appears.
+  - The render loop survives a bad frame instead of freezing.
+- **Phone diet**: the Light preset (Auto on phones) uses 2 pedestrian models instead of 8 (about 5 MB instead of 19 MB), fewer walkers, and the same two models for seated extras.
+- **Heart Lab**: if you arrive before its 3D model has streamed in, it opens automatically when the model arrives. Esc cancels this.
+
+## Not done / limits
+- **Devices and networks**: no real iPhone or Android test yet, and no real network-throttling run. The browser tools here can't throttle; entry needs about 13 MB minus the hospital, plus about 6 MB for the avatar.
+- **Avatar quality**: avatar hair edges and beards are unchanged.
+- **Logo**: the official logo is still a placeholder (replace `assets/brand/logo.svg`).
+- **Not built**: there is no AI NOVA (scripted only) and no analytics backend.
+- **Districts**: individual district interiors were not redesigned in this phase, as planned.

@@ -78,11 +78,11 @@ export async function runQA(T, { presets = true, only = null, log = () => {} } =
       for (let i = 0; i < 3; i++) T.step(1 / 30);
       const e0 = R.errors.length;
       try { T.runAction(s); } catch (e) { stBad.push(`${s.id}: ${e.message}`); continue; }
-      for (let k = 0; k < 90 && T.mode === 'walk'; k++) { T.step(1 / 20); await W(10); } // some open after a reach animation
+      for (let k = 0; k < 160 && T.mode === 'walk'; k++) { T.step(1 / 20); await W(25); } // some open after a reach animation or a lazy model load
       const opened = T.mode !== 'walk'; const st = T.staging.cur && T.staging.cur.key; if (st) staged++;
       if (!opened) stBad.push(`${s.id} did not open`);
       // close it the way a player would (Esc)
-      dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await W(80); for (let i = 0; i < 3; i++) T.step(1 / 30);
+      dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await W(80); for (let i = 0; i < 40 && T.mode !== 'walk'; i++) { T.step(1 / 20); await W(60); } // World View flies back before handing over
       if (T.mode === 'talk') T.conv.end();
       if (T.mode !== 'walk') { stBad.push(`${s.id} stuck in ${T.mode}`); T.ui.closeAll(); }
       if (T.staging.cur) stBad.push(`${s.id} staged scene not cleaned up`);

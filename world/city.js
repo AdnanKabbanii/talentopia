@@ -87,7 +87,7 @@ export function buildPlaza(ctx) {
   }
   // Talentopia Tower (Blender landmark, streamed as GLB) north of the fountain
   const T = { x: 0, z: -20 };
-  ctx.landmark('talentopia_tower', T.x, P, T.z, 0, { w: 30, d: 30, h: 150, name: 'Talentopia Tower', district: 'plaza', color: '#8D70FF' });
+  ctx.landmark('talentopia_tower', T.x, P, T.z, 0, { w: 30, d: 30, h: 150, name: 'Talentopia Tower', district: 'plaza', color: '#8D70FF', collide: false }); // City Hall (cityhall.js) adds the walk-in lobby walls
   // fountain
   const F = { x: 0, z: 8 };
   ctx.geo(ucyl(9, 9.3, 0.7, 48), M('limestone'), mat4(F.x, P + 0.35, F.z));

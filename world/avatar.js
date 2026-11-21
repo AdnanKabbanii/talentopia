@@ -38,6 +38,7 @@ export const READY = [
 const HAIR_COLORS = [['Black', '#141012'], ['Dark brown', '#2a1d16'], ['Brown', '#5a3a24'], ['Auburn', '#7a3420'], ['Copper', '#a5532a'], ['Blonde', '#c9a46a'], ['Platinum', '#e3dccb'], ['Grey', '#9a9a98'], ['Violet', '#6b4fd8']];
 const EYE_COLORS = [['Brown', '#5b3a22'], ['Hazel', '#7a6a32'], ['Green', '#3f7a4a'], ['Blue', '#3a6ea8'], ['Grey', '#6f7c86'], ['Amber', '#a8742a']];
 const TINTS = [['Original', '#ffffff'], ['Navy', '#5f6f9a'], ['Graphite', '#6b6f78'], ['Sand', '#e9dcc4'], ['Sage', '#a9c2a4'], ['Violet', '#b9a8f0']];
+const SKIN_HEX = { young_caucasian_female: '#efcfb6', young_caucasian_male: '#e6bf9f', young_asian_female: '#e3c09b', young_asian_male: '#d4a77f', middleage_caucasian_male: '#f0d2bd', young_african_female: '#6b4430', young_african_male: '#7a4e36', middleage_african_female: '#5a3828' };
 const SKIN_LABELS = { young_caucasian_female: 'Light', young_caucasian_male: 'Light warm', young_asian_female: 'Light olive', young_asian_male: 'Olive', middleage_caucasian_male: 'Fair', young_african_female: 'Deep', young_african_male: 'Deep warm', middleage_african_female: 'Rich' };
 
 function prepMaterial(o) {
@@ -96,11 +97,14 @@ export class AvatarModel {
   }
   applyMorphs() { const mv = this.morphValues(); for (const m of this.allMeshes()) { if (!m.morphTargetDictionary) continue; for (const k in mv) { const i = m.morphTargetDictionary[k]; if (i !== undefined) m.morphTargetInfluences[i] = mv[k]; } } this.measureFace(); }
   // body morphs change head height without moving the head bone: measure where the eyes really are (root space, unscaled)
-  measureFace() {
-    const eyes = this.meshes && this.meshes.find(m => /^eyes__/.test(m.name)); const head = this.bones && this.bones.head; if (!eyes || !head) { this.faceDy = 0; return; }
-    this.root.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(this.root.matrixWorld).invert(), v = new THREE.Vector3(); let y = 0, n = 0;
-    const cnt = eyes.geometry.attributes.position.count; for (let i = 0; i < cnt; i += 7) { eyes.getVertexPosition(i, v); v.applyMatrix4(eyes.matrixWorld).applyMatrix4(inv); y += v.y; n++; }
-    const hb = head.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv).y; this.faceDy = n ? y / n - hb : 0;
+  measureFace() { // in the bind pose (stable: no dependence on the current animation frame or render state)
+    const eyes = this.meshes && this.meshes.find(m => /^eyes__/.test(m.name)); if (!eyes || !eyes.skeleton) { this.faceDy = 0.05; return; }
+    const sk = eyes.skeleton, hi = sk.bones.findIndex(b => b.name === 'head'); if (hi < 0) { this.faceDy = 0.05; return; }
+    const pos = eyes.geometry.attributes.position, mp = eyes.geometry.morphAttributes.position || [], inf = eyes.morphTargetInfluences || [], rel = eyes.geometry.morphTargetsRelative;
+    let y = 0, n = 0; for (let i = 0; i < pos.count; i += 5) { let v = pos.getY(i); for (let k = 0; k < mp.length; k++) if (inf[k]) v += (rel ? mp[k].getY(i) : mp[k].getY(i) - pos.getY(i)) * inf[k]; y += v; n++; }
+    const eyeY = new THREE.Vector3(0, n ? y / n : 0, 0).applyMatrix4(eyes.bindMatrix).y;
+    const headY = new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[hi]).invert()).y;
+    this.faceDy = THREE.MathUtils.clamp(eyeY - headY, -0.05, 0.2);
   }
   setExpression(name, v) { for (const m of this.allMeshes()) { const i = m.morphTargetDictionary && m.morphTargetDictionary[name]; if (i !== undefined) m.morphTargetInfluences[i] = v; } }
   allMeshes() { const out = [...this.meshes]; for (const k in this.partMeshes) out.push(...this.partMeshes[k]); return out; }
@@ -223,7 +227,7 @@ export class AvatarStudio {
     if (narrow) { const H = innerHeight, oy = Math.round(H * 0.5); this.camera.setViewOffset(innerWidth, H + oy, 0, oy, innerWidth, H); } else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
     // portrait phones see a narrow top strip: back off and aim a little higher so head and shoulders (or the full body) fit
-    const pd = narrow ? o.dist * (innerHeight > innerWidth ? 1.75 : 1.2) : o.dist, ph = narrow ? o.height + (this.frameMode === 'full' ? 0.05 : 0.22) : o.height;
+    const pd = narrow ? o.dist * (innerHeight > innerWidth ? 1.75 : 1.2) : o.dist, ph = narrow ? o.height + ({ full: 0.05, upper: 0.2, face: -0.02 }[this.frameMode] ?? 0.1) : o.height;
     this.camera.position.set(Math.sin(0) * pd - off, ph + 0.08 * pd, pd); this.camera.lookAt(-off, ph, 0);
     this.turn.rotation.y = o.yaw;
     if (this.char) {
@@ -246,12 +250,15 @@ export class AvatarStudio {
     const ov = $('overlay'); if (ov) ov.classList.add('hidden'); const fc = $('flyCap'); if (fc) fc.style.visibility = 'hidden'; this.frame(mode === 'quick' ? 'upper' : 'full'); this.build(); this.bindPointer();
   }
   // a portrait of the current avatar rendered from the live 3D model (avatar cards, Passport)
-  snapshot(size = 320) {
-    const r = this.renderer, cv = r.domElement, cam = new THREE.PerspectiveCamera(24, cv.width / cv.height, 0.05, 30);
+  snapshot(size = 320, full = false) {
+    // render into a square viewport so the framing is the same on portrait phones and wide screens
+    const r = this.renderer, cv = r.domElement, pr = r.getPixelRatio(), S = Math.min(cv.width, cv.height), cam = new THREE.PerspectiveCamera(full ? 24 : 16, 1, 0.05, 30);
+    if (this.char) for (let i = 0; i < 4; i++) this.char.update(1 / 30, 0, 0); // pose the avatar even if the studio has not been rendering
     const hy = this.headY(); const yaw0 = this.turn.rotation.y; this.turn.rotation.y = 0.32; this.turn.updateMatrixWorld(true);
-    cam.position.set(0, hy - 0.1, 2.05); cam.lookAt(0, hy - 0.17, 0); r.render(this.scene, cam);
-    const c = document.createElement('canvas'); c.width = c.height = size; const s = Math.min(cv.width, cv.height) * 0.66;
-    c.getContext('2d').drawImage(cv, (cv.width - s) / 2, (cv.height - s) / 2, s, s, 0, 0, size, size);
+    if (full) { cam.position.set(0, hy * 0.55, 6.2); cam.lookAt(0, hy * 0.52, 0); } else { cam.position.set(0, hy - 0.1, 2.05); cam.lookAt(0, hy - 0.17, 0); }
+    const vp = new THREE.Vector4(); r.getViewport(vp); r.setViewport(0, 0, S / pr, S / pr); r.render(this.scene, cam);
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    c.getContext('2d').drawImage(cv, 0, cv.height - S, S, S, 0, 0, size, size); r.setViewport(vp);
     this.turn.rotation.y = yaw0; return c.toDataURL('image/jpeg', 0.86);
   }
   close() { this.active = false; document.body.classList.remove('in-studio'); this.camera.clearViewOffset(); const el = $('studio'); el.classList.remove('show'); el.style.display = 'none'; }
@@ -262,6 +269,7 @@ export class AvatarStudio {
     const chips = (key, items) => `<div class="chips">${items.map(([id, label]) => `<button data-k="${key}" data-v="${id}" class="${c[key] === id ? 'on' : ''}">${label}</button>`).join('')}</div>`;
     const swatches = (key, items) => `<div class="sw">${items.map(([label, hex]) => `<button title="${label}" data-k="${key}" data-v="${hex}" class="${c[key] === hex ? 'on' : ''}" style="background:${hex}"></button>`).join('')}</div>`;
     const P = cat.parts;
+    const thumbs = (key, items, kind) => `<div class="thumbs">${items.map(([id, label]) => `<button data-k="${key}" data-v="${id}" class="${c[key] === id ? 'on' : ''}" aria-label="${label}"><img src="assets/ui/studio/${kind}_${id}.jpg" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span>${label}</span></button>`).join('')}</div>`;
     if (this.mode === 'quick') return this.buildQuick();
     const tabs = { face: 'Face', hair: 'Hair', skin: 'Skin & eyes', body: 'Body', style: 'Outfit', extras: 'Accessories' };
     let body = '';
@@ -271,10 +279,10 @@ export class AvatarStudio {
       <h4>Eyes</h4>${slider('eyesBig', 'Eye size', 0, 1, 0.05)}${slider('eyesUp', 'Eye angle', 0, 1, 0.05)}
       <h4>Expression preview</h4><div class="chips">${['neutral', 'smile', 'talk', 'surprised'].map(e => `<button data-expr="${e}" class="${this.expr === e ? 'on' : ''}">${e[0].toUpperCase() + e.slice(1)}</button>`).join('')}</div>
       <h4>Create my Digital Twin</h4><button class="st-row" data-photo><span>✦ Make an editable 3D likeness from a photo</span><em class="soon">Coming soon</em></button>`;
-    if (tab === 'skin') body = `<h4>Skin tone</h4>${chips('skin', cat.skins.map(s => [s, SKIN_LABELS[s] || s]))}${slider('tone', 'Fine tone', -0.25, 0.15, 0.01, 'Deeper', 'Lighter')}<h4>Eye colour</h4>${swatches('eyes', EYE_COLORS)}`;
-    if (tab === 'hair') body = `<h4>Hairstyle</h4>${chips('hair', [['none', 'None'], ...P.hair.map(p => [p.id, p.label])])}<h4>Hair colour</h4>${swatches('hairColor', HAIR_COLORS)}
+    if (tab === 'skin') body = `<h4>Skin tone</h4><div class="sw sw-lg">${cat.skins.map(s => `<button title="${SKIN_LABELS[s] || s}" aria-label="Skin ${SKIN_LABELS[s] || s}" data-k="skin" data-v="${s}" class="${c.skin === s ? 'on' : ''}" style="background:${SKIN_HEX[s] || '#c89f7c'}"></button>`).join('')}</div>${slider('tone', 'Fine tone', -0.25, 0.15, 0.01, 'Deeper', 'Lighter')}<h4>Eye colour</h4>${swatches('eyes', EYE_COLORS)}`;
+    if (tab === 'hair') body = `<h4>Hairstyle</h4>${thumbs('hair', [['none', 'None'], ...P.hair.map(p => [p.id, p.label])], 'hair')}<h4>Hair colour</h4>${swatches('hairColor', HAIR_COLORS)}
       <h4>Eyebrows</h4>${chips('brows', cat.brows.map(b => [b.id, b.label]))}<h4>Facial hair</h4>${chips('beard', [['none', 'None'], ...cat.beards.map(b => [b.id, b.label])])}`;
-    if (tab === 'style') body = `<h4>Outfit</h4>${chips('outfit', P.outfit.map(p => [p.id, p.label]))}<p class="hint2">Business suit, Tailored suit and Work uniform double as professional attire.</p><h4>Outfit colour</h4>${swatches('outfitTint', TINTS)}<h4>Footwear</h4>${chips('shoes', P.shoes.map(p => [p.id, p.label]))}`;
+    if (tab === 'style') body = `<h4>Outfit</h4>${thumbs('outfit', P.outfit.map(p => [p.id, p.label]), 'outfit')}<p class="hint2">Business suit, Tailored suit and Work uniform double as professional attire.</p><h4>Outfit colour</h4>${swatches('outfitTint', TINTS)}<h4>Footwear</h4>${chips('shoes', P.shoes.map(p => [p.id, p.label]))}`;
     if (tab === 'extras') body = `<h4>Eyewear</h4>${chips('glasses', [['none', 'None'], ['round', 'Round'], ['rect', 'Rectangular'], ['aviator', 'Aviator']])}<h4>Headwear</h4>${chips('hat', [['none', 'None'], ['fedora01', 'Fedora']])}`;
     $('studioPanel').innerHTML = `<div class="st-grab"></div><div class="st-head"><div><b>Avatar Studio</b><span>Every change edits your 3D avatar.</span></div><div class="st-cam"><button data-frame="full">Full</button><button data-frame="upper">Upper</button><button data-frame="face">Face</button></div></div>
       <div class="st-tabs">${Object.entries(tabs).map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
