@@ -26,6 +26,15 @@ export const PRESETS = {
   masculine: { pres: 0.85, build: 0.05, muscle: 0.5, hair: 'short02', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', shoes: 'shoes03', skin: 'young_caucasian_male', hairColor: '#3a2a1e', jawWide: 0.4, chinStrong: 0.3 },
   neutral: { pres: 0, build: 0, muscle: 0.3, hair: 'short04', brows: 'eyebrow001', beard: 'none', outfit: 'female_sportsuit01', shoes: 'shoes03', skin: 'young_asian_female', hairColor: '#141012' },
 };
+// ready-made avatars offered during onboarding (portraits in assets/ui/avatars are renders of these exact configs)
+export const READY = [
+  { id: 'aria', name: 'Aria', cfg: { pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01', cheekbones: 0.45, eyes: '#5b3a22' } },
+  { id: 'leo', name: 'Leo', cfg: { pres: 0.85, build: 0.05, muscle: 0.5, skin: 'young_caucasian_male', hair: 'short02', hairColor: '#5a3a24', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', outfitTint: '#ffffff', shoes: 'shoes03', jawWide: 0.4, chinStrong: 0.3, eyes: '#3a6ea8' } },
+  { id: 'mei', name: 'Mei', cfg: { pres: -0.7, build: -0.1, muscle: 0.2, skin: 'young_asian_female', hair: 'bob01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'round', eyes: '#5b3a22' } },
+  { id: 'omar', name: 'Omar', cfg: { pres: 0.8, build: 0.15, muscle: 0.45, skin: 'young_asian_male', hair: 'short01', hairColor: '#141012', brows: 'eyebrow006', beard: 'full', outfit: 'male_elegantsuit01', outfitTint: '#6b6f78', shoes: 'shoes03', jawWide: 0.35, eyes: '#5b3a22' } },
+  { id: 'zara', name: 'Zara', cfg: { pres: -0.75, build: 0, muscle: 0.35, skin: 'young_caucasian_female', hair: 'ponytail01', hairColor: '#7a3420', brows: 'eyebrow001', outfit: 'female_sportsuit01', outfitTint: '#a9c2a4', shoes: 'shoes03', eyes: '#3f7a4a' } },
+  { id: 'kai', name: 'Kai', cfg: { pres: 0.1, build: 0, muscle: 0.35, skin: 'young_african_male', hair: 'short04', hairColor: '#141012', brows: 'eyebrow001', outfit: 'male_casualsuit05', outfitTint: '#b9a8f0', shoes: 'shoes03', glasses: 'rect', eyes: '#5b3a22' } },
+];
 const HAIR_COLORS = [['Black', '#141012'], ['Dark brown', '#2a1d16'], ['Brown', '#5a3a24'], ['Auburn', '#7a3420'], ['Copper', '#a5532a'], ['Blonde', '#c9a46a'], ['Platinum', '#e3dccb'], ['Grey', '#9a9a98'], ['Violet', '#6b4fd8']];
 const EYE_COLORS = [['Brown', '#5b3a22'], ['Hazel', '#7a6a32'], ['Green', '#3f7a4a'], ['Blue', '#3a6ea8'], ['Grey', '#6f7c86'], ['Amber', '#a8742a']];
 const TINTS = [['Original', '#ffffff'], ['Navy', '#5f6f9a'], ['Graphite', '#6b6f78'], ['Sand', '#e9dcc4'], ['Sage', '#a9c2a4'], ['Violet', '#b9a8f0']];
@@ -85,7 +94,14 @@ export class AvatarModel {
     return { masc: v(c.pres), fem: v(-c.pres), heavy: v(c.build), slim: v(-c.build), muscular: c.muscle, jawWide: c.jawWide, chinStrong: c.chinStrong, noseWide: v(c.nose), noseNarrow: v(-c.nose),
       cheekbones: c.cheekbones, eyesBig: c.eyesBig, eyesUp: c.eyesUp, lipsFull: c.lipsFull, headRound: v(-c.head), headSquare: v(c.head) };
   }
-  applyMorphs() { const mv = this.morphValues(); for (const m of this.allMeshes()) { if (!m.morphTargetDictionary) continue; for (const k in mv) { const i = m.morphTargetDictionary[k]; if (i !== undefined) m.morphTargetInfluences[i] = mv[k]; } } }
+  applyMorphs() { const mv = this.morphValues(); for (const m of this.allMeshes()) { if (!m.morphTargetDictionary) continue; for (const k in mv) { const i = m.morphTargetDictionary[k]; if (i !== undefined) m.morphTargetInfluences[i] = mv[k]; } } this.measureFace(); }
+  // body morphs change head height without moving the head bone: measure where the eyes really are (root space, unscaled)
+  measureFace() {
+    const eyes = this.meshes && this.meshes.find(m => /^eyes__/.test(m.name)); const head = this.bones && this.bones.head; if (!eyes || !head) { this.faceDy = 0; return; }
+    this.root.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(this.root.matrixWorld).invert(), v = new THREE.Vector3(); let y = 0, n = 0;
+    const cnt = eyes.geometry.attributes.position.count; for (let i = 0; i < cnt; i += 7) { eyes.getVertexPosition(i, v); v.applyMatrix4(eyes.matrixWorld).applyMatrix4(inv); y += v.y; n++; }
+    const hb = head.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv).y; this.faceDy = n ? y / n - hb : 0;
+  }
   setExpression(name, v) { for (const m of this.allMeshes()) { const i = m.morphTargetDictionary && m.morphTargetDictionary[name]; if (i !== undefined) m.morphTargetInfluences[i] = v; } }
   allMeshes() { const out = [...this.meshes]; for (const k in this.partMeshes) out.push(...this.partMeshes[k]); return out; }
   async loadPart(kind, id) {
@@ -196,14 +212,19 @@ export class AvatarStudio {
     this.expr = 'neutral'; this.exprT = 0;
   }
   attach(avatar, character) { this.avatar = avatar; this.char = character; this.turn.add(character.root); character.root.position.set(0, 0, 0); character.root.rotation.y = 0; }
-  headY() { const h = this.avatar && this.avatar.bones.head; if (!h) return 1.6; this.turn.updateMatrixWorld(true); return h.getWorldPosition(new THREE.Vector3()).y + 0.07; }
+  headY() { const h = this.avatar && this.avatar.bones.head; if (!h) return 1.6; this.turn.updateMatrixWorld(true); const s = this.char ? this.char.leanG.scale.y : 1; return h.getWorldPosition(new THREE.Vector3()).y + (this.avatar.faceDy || 0.05) * s + 0.02; } // ≈ eye level
   frame(mode) { this.frameMode = mode; const hy = this.headY(); if (mode === 'face') { this.orbit.tDist = 0.95; this.orbit.tHeight = hy; } else if (mode === 'upper') { this.orbit.tDist = 1.9; this.orbit.tHeight = hy - 0.35; } else { this.orbit.tDist = 4.0; this.orbit.tHeight = hy * 0.56; } }
   render(dt) {
     if (this.frameMode && this.char) { const hy = this.headY(); this.orbit.tHeight = this.frameMode === 'face' ? hy : this.frameMode === 'upper' ? hy - 0.35 : hy * 0.56; }
     const o = this.orbit; o.dist += (o.tDist - o.dist) * Math.min(1, dt * 6); o.height += (o.tHeight - o.height) * Math.min(1, dt * 6);
     const narrow = innerWidth < 760; const off = narrow ? 0 : -0.55 * o.dist / 4; // keep the avatar left of the panel on desktop
-    this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
-    this.camera.position.set(Math.sin(0) * o.dist - off, o.height + 0.08 * o.dist, o.dist); this.camera.lookAt(-off, o.height, 0);
+    this.camera.aspect = innerWidth / innerHeight;
+    // phones: the panel covers the lower half, so render the avatar into the top part of the screen
+    if (narrow) { const H = innerHeight, oy = Math.round(H * 0.5); this.camera.setViewOffset(innerWidth, H + oy, 0, oy, innerWidth, H); } else this.camera.clearViewOffset();
+    this.camera.updateProjectionMatrix();
+    // portrait phones see a narrow top strip: back off and aim a little higher so head and shoulders (or the full body) fit
+    const pd = narrow ? o.dist * (innerHeight > innerWidth ? 1.75 : 1.2) : o.dist, ph = narrow ? o.height + (this.frameMode === 'full' ? 0.05 : 0.22) : o.height;
+    this.camera.position.set(Math.sin(0) * pd - off, ph + 0.08 * pd, pd); this.camera.lookAt(-off, ph, 0);
     this.turn.rotation.y = o.yaw;
     if (this.char) {
       this.char.update(dt, 0, 0);
@@ -218,10 +239,22 @@ export class AvatarStudio {
     this.renderer.render(this.scene, this.camera);
   }
   // ---------------------------------------------------------------- UI
-  open() {
-    this.active = true; const el = $('studio'); el.style.display = 'grid'; const ov = $('overlay'); if (ov) ov.style.display = 'none'; const fc = $('flyCap'); if (fc) fc.style.visibility = 'hidden'; this.build(); this.bindPointer();
+  // mode 'quick': pick a ready-made avatar (onboarding); 'full': every customisation category
+  open(mode = 'full', { onSkip = null, enterLabel = 'Enter Talent City' } = {}) {
+    this.mode = mode; this.onSkip = onSkip; this.enterLabel = enterLabel; this.fromQuick = mode === 'quick';
+    this.active = true; document.body.classList.add('in-studio'); const el = $('studio'); el.style.display = 'grid'; requestAnimationFrame(() => el.classList.add('show'));
+    const ov = $('overlay'); if (ov) ov.classList.add('hidden'); const fc = $('flyCap'); if (fc) fc.style.visibility = 'hidden'; this.frame(mode === 'quick' ? 'upper' : 'full'); this.build(); this.bindPointer();
   }
-  close() { this.active = false; $('studio').style.display = 'none'; }
+  // a portrait of the current avatar rendered from the live 3D model (avatar cards, Passport)
+  snapshot(size = 320) {
+    const r = this.renderer, cv = r.domElement, cam = new THREE.PerspectiveCamera(24, cv.width / cv.height, 0.05, 30);
+    const hy = this.headY(); const yaw0 = this.turn.rotation.y; this.turn.rotation.y = 0.32; this.turn.updateMatrixWorld(true);
+    cam.position.set(0, hy - 0.1, 2.05); cam.lookAt(0, hy - 0.17, 0); r.render(this.scene, cam);
+    const c = document.createElement('canvas'); c.width = c.height = size; const s = Math.min(cv.width, cv.height) * 0.66;
+    c.getContext('2d').drawImage(cv, (cv.width - s) / 2, (cv.height - s) / 2, s, s, 0, 0, size, size);
+    this.turn.rotation.y = yaw0; return c.toDataURL('image/jpeg', 0.86);
+  }
+  close() { this.active = false; document.body.classList.remove('in-studio'); this.camera.clearViewOffset(); const el = $('studio'); el.classList.remove('show'); el.style.display = 'none'; }
   build() {
     const av = this.avatar, cat = av.catalog, c = av.cfg;
     const tab = this.tab || 'body';
@@ -229,23 +262,24 @@ export class AvatarStudio {
     const chips = (key, items) => `<div class="chips">${items.map(([id, label]) => `<button data-k="${key}" data-v="${id}" class="${c[key] === id ? 'on' : ''}">${label}</button>`).join('')}</div>`;
     const swatches = (key, items) => `<div class="sw">${items.map(([label, hex]) => `<button title="${label}" data-k="${key}" data-v="${hex}" class="${c[key] === hex ? 'on' : ''}" style="background:${hex}"></button>`).join('')}</div>`;
     const P = cat.parts;
-    const tabs = { body: 'Body', face: 'Face', skin: 'Skin & eyes', hair: 'Hair', style: 'Outfit', extras: 'Extras' };
+    if (this.mode === 'quick') return this.buildQuick();
+    const tabs = { face: 'Face', hair: 'Hair', skin: 'Skin & eyes', body: 'Body', style: 'Outfit', extras: 'Accessories' };
     let body = '';
     if (tab === 'body') body = `<h4>Quick start</h4><div class="chips"><button data-preset="feminine">Feminine</button><button data-preset="neutral">Neutral</button><button data-preset="masculine">Masculine</button><button data-random>Randomise</button></div>
       <h4>Proportions</h4>${slider('pres', 'Presentation', -1, 1, 0.05, 'Feminine', 'Masculine')}${slider('build', 'Build', -1, 1, 0.05, 'Slim', 'Fuller')}${slider('muscle', 'Muscle tone', 0, 1, 0.05)}${slider('height', `Height · ${Math.round(c.height * (170 + c.pres * 6))} cm`, 0.9, 1.1, 0.01)}`;
     if (tab === 'face') body = `<h4>Face structure</h4>${slider('jawWide', 'Jaw width', 0, 1, 0.05)}${slider('chinStrong', 'Chin', 0, 1, 0.05)}${slider('cheekbones', 'Cheekbones', 0, 1, 0.05)}${slider('nose', 'Nose', -1, 1, 0.05, 'Narrow', 'Wide')}${slider('lipsFull', 'Lips', 0, 1, 0.05)}${slider('head', 'Head shape', -1, 1, 0.05, 'Round', 'Square')}
       <h4>Eyes</h4>${slider('eyesBig', 'Eye size', 0, 1, 0.05)}${slider('eyesUp', 'Eye angle', 0, 1, 0.05)}
       <h4>Expression preview</h4><div class="chips">${['neutral', 'smile', 'talk', 'surprised'].map(e => `<button data-expr="${e}" class="${this.expr === e ? 'on' : ''}">${e[0].toUpperCase() + e.slice(1)}</button>`).join('')}</div>
-      <h4>Photo-assisted creator (optional)</h4><button class="ghost" data-photo>Use a photo as a reference…</button>`;
+      <h4>Create my Digital Twin</h4><button class="st-row" data-photo><span>✦ Make an editable 3D likeness from a photo</span><em class="soon">Coming soon</em></button>`;
     if (tab === 'skin') body = `<h4>Skin tone</h4>${chips('skin', cat.skins.map(s => [s, SKIN_LABELS[s] || s]))}${slider('tone', 'Fine tone', -0.25, 0.15, 0.01, 'Deeper', 'Lighter')}<h4>Eye colour</h4>${swatches('eyes', EYE_COLORS)}`;
     if (tab === 'hair') body = `<h4>Hairstyle</h4>${chips('hair', [['none', 'None'], ...P.hair.map(p => [p.id, p.label])])}<h4>Hair colour</h4>${swatches('hairColor', HAIR_COLORS)}
       <h4>Eyebrows</h4>${chips('brows', cat.brows.map(b => [b.id, b.label]))}<h4>Facial hair</h4>${chips('beard', [['none', 'None'], ...cat.beards.map(b => [b.id, b.label])])}`;
     if (tab === 'style') body = `<h4>Outfit</h4>${chips('outfit', P.outfit.map(p => [p.id, p.label]))}<p class="hint2">Business suit, Tailored suit and Work uniform double as professional attire.</p><h4>Outfit colour</h4>${swatches('outfitTint', TINTS)}<h4>Footwear</h4>${chips('shoes', P.shoes.map(p => [p.id, p.label]))}`;
     if (tab === 'extras') body = `<h4>Eyewear</h4>${chips('glasses', [['none', 'None'], ['round', 'Round'], ['rect', 'Rectangular'], ['aviator', 'Aviator']])}<h4>Headwear</h4>${chips('hat', [['none', 'None'], ['fedora01', 'Fedora']])}`;
-    $('studioPanel').innerHTML = `<div class="st-head"><div><b>Avatar Studio</b><span>Every change edits the 3D model.</span></div><div class="st-cam"><button data-frame="full">Full</button><button data-frame="upper">Upper</button><button data-frame="face">Face</button></div></div>
+    $('studioPanel').innerHTML = `<div class="st-grab"></div><div class="st-head"><div><b>Avatar Studio</b><span>Every change edits your 3D avatar.</span></div><div class="st-cam"><button data-frame="full">Full</button><button data-frame="upper">Upper</button><button data-frame="face">Face</button></div></div>
       <div class="st-tabs">${Object.entries(tabs).map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div class="st-body">${body}</div>
-      <div class="st-foot"><span class="hint2">Drag the avatar to rotate · scroll to zoom</span><button class="primary" id="studioDone">Save & enter Talentopia →</button></div>`;
+      <div class="st-foot">${this.fromQuick ? '<button class="ghost" data-back>Back</button>' : ''}<button class="ghost" data-save>Save</button><button class="btn-primary" id="studioDone">${this.enterLabel}</button></div>`;
     const P2 = $('studioPanel');
     P2.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { this.tab = b.dataset.tab; if (this.tab === 'face') this.frame('face'); else if (this.tab === 'hair') this.frame('upper'); else this.frame('full'); this.build(); });
     P2.querySelectorAll('[data-frame]').forEach(b => b.onclick = () => this.frame(b.dataset.frame));
@@ -256,6 +290,24 @@ export class AvatarStudio {
     const rnd = P2.querySelector('[data-random]'); if (rnd) rnd.onclick = async () => { const r = (a) => a[Math.random() * a.length | 0]; await av.setCfg({ pres: Math.round((Math.random() * 2 - 1) * 20) / 20, build: Math.round((Math.random() - 0.5) * 12) / 20, muscle: Math.random() * 0.8, jawWide: Math.random() * 0.6, cheekbones: Math.random() * 0.6, nose: Math.random() - 0.5, eyesBig: Math.random() * 0.5, head: Math.random() - 0.5, skin: r(cat.skins), eyes: r(EYE_COLORS)[1], hair: r(P.hair).id, hairColor: r(HAIR_COLORS)[1], outfit: r(P.outfit).id, shoes: r(P.shoes).id, beard: Math.random() < 0.3 ? r(cat.beards).id : 'none', glasses: Math.random() < 0.3 ? r(['round', 'rect', 'aviator']) : 'none' }); this.save(); this.build(); };
     P2.querySelectorAll('[data-expr]').forEach(b => b.onclick = () => { this.expr = b.dataset.expr; this.exprT = 0; this.build(); });
     const ph = P2.querySelector('[data-photo]'); if (ph) ph.onclick = () => this.photoFlow();
+    const bk = P2.querySelector('[data-back]'); if (bk) bk.onclick = () => { this.mode = 'quick'; this.frame('upper'); this.build(); };
+    const sv = P2.querySelector('[data-save]'); if (sv) sv.onclick = () => { this.save(); sv.textContent = 'Saved ✓'; setTimeout(() => { sv.textContent = 'Save'; }, 1400); };
+    $('studioDone').onclick = () => { this.save(); this.onDone && this.onDone(); };
+  }
+  buildQuick() {
+    const av = this.avatar, sel = this.readyId;
+    $('studioPanel').innerHTML = `<div class="st-grab"></div><div class="st-head"><div><b>Choose your avatar</b><span>Pick one to start. You can change everything later.</span></div></div>
+      <div class="st-body"><div class="av-grid">${READY.map(r => `<button class="av-card ${sel === r.id ? 'on' : ''}" data-ready="${r.id}" aria-label="Avatar ${r.name}"><img src="assets/ui/avatars/${r.id}.jpg" alt="" loading="lazy"><span>${r.name}</span></button>`).join('')}</div>
+        <button class="st-row" data-custom><span>✎ Customize my avatar</span><em>Face, hair, skin, body, outfit</em></button>
+        <button class="st-row" data-photo><span>✦ Create my Digital Twin</span><em class="soon">Coming soon</em></button></div>
+      <div class="st-foot"><button class="ghost" data-skip>Skip for now</button><button class="btn-primary" id="studioDone">${this.enterLabel}</button></div>`;
+    const P2 = $('studioPanel');
+    P2.querySelectorAll('[data-ready]').forEach(b => b.onclick = async () => {
+      const r = READY.find(x => x.id === b.dataset.ready); this.readyId = r.id; P2.querySelectorAll('.av-card').forEach(x => x.classList.toggle('on', x === b)); b.classList.add('busy');
+      await av.setCfg({ ...DEFAULT, ...r.cfg }); this.applyHeight(); this.save(); b.classList.remove('busy'); });
+    P2.querySelector('[data-custom]').onclick = () => { this.mode = 'full'; this.tab = 'face'; this.frame('face'); this.build(); };
+    P2.querySelector('[data-photo]').onclick = () => this.photoFlow();
+    P2.querySelector('[data-skip]').onclick = () => { this.onSkip ? this.onSkip() : this.onDone && this.onDone(); };
     $('studioDone').onclick = () => { this.save(); this.onDone && this.onDone(); };
   }
   applyHeight() { if (this.char) { const s = this.char.baseScale * this.avatar.cfg.height; this.char.leanG.scale.setScalar(s); } }
@@ -269,10 +321,10 @@ export class AvatarStudio {
   }
   photoFlow() {
     const box = $('studioModal'); box.style.display = 'grid';
-    box.innerHTML = `<div class="card glass" style="max-width:520px;padding:22px"><h3 style="margin:0 0 8px">Photo-assisted avatar (optional)</h3>
-      <p style="color:#5b6476;line-height:1.5;font-size:14px">With your consent, a photo could be used <b>only</b> to suggest visual features (skin tone, hair, face shape) that you can then edit. Talentopia never infers personality, ability or career suitability from appearance, and a photo is never required.</p>
-      <p style="color:#5b6476;line-height:1.5;font-size:14px"><b>Status:</b> this needs an image-to-3D / face-fitting service and a secure backend, which are <b>not connected yet</b>. No photo is uploaded or stored. The integration point is <code>AVATAR_PHOTO_ENDPOINT</code> in <code>world/avatar.js</code>.</p>
-      <div class="row" style="margin-top:10px"><button class="primary" id="phClose">OK, I’ll customise manually</button></div></div>`;
+    box.innerHTML = `<div class="card lg" style="max-width:520px;padding:22px"><div class="eyebrow">Coming soon</div><h3 style="margin:4px 0 8px">Create my Digital Twin</h3>
+      <p style="color:#5b6476;line-height:1.5;font-size:14px">In a future version, you could choose to upload a photo and get an editable 3D likeness. It would only suggest visual features (skin tone, hair, face shape) that you then adjust. Talentopia never infers personality, ability or career suitability from appearance, a photo is never required, and nothing would be uploaded without your consent.</p>
+      <p style="color:#5b6476;line-height:1.5;font-size:14px"><b>Status:</b> not available yet. It needs a 3D face-fitting service and a secure backend. No photo is uploaded or stored today.</p>
+      <div class="row" style="margin-top:10px"><button class="btn-primary" id="phClose">Customize manually</button></div></div>`;
     $('phClose').onclick = () => { box.style.display = 'none'; };
   }
 }

@@ -12,7 +12,8 @@ import { Ctx, initMaterials, M, makeCar, makeShuttle, Batch, WIND } from './kit.
 import * as TX from './textures.js';
 import { buildStreets, buildPlaza, buildMonorail, buildNav, findPath, nearestSidewalk, ROUTES, polyline, blockLoop, CITY, buildSignals, buildBackdrop, SIGNAL, XS, ZS, HALF } from './city.js';
 import { buildDistricts, DISTRICTS, PLAZA, districtAt } from './districts.js';
-import { furnish, furnishHospital } from './interiors.js';
+import { furnish, furnishHospital, CAREERS } from './interiors.js';
+import { WorldView } from './worldview.js';
 import { loadModel, Character } from './characters.js';
 import { createUI } from './ui.js';
 import { loadLandmarks, loadHospitalUpgrade } from './landmarks.js';
@@ -92,8 +93,16 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); if
 
 // ------------------------------------------------------------------ loading
 const manager = new THREE.LoadingManager();
-let loadParts = { sky: 0, hospital: 0, avatar: 0, landmarks: 0 };
-const setLoad = (k, v) => { loadParts[k] = v; const p = (loadParts.sky + loadParts.hospital + loadParts.landmarks + 0.2) / 3.2; $('loadBar').style.width = Math.round(p * 100) + '%'; };
+let loadParts = { sky: 0, hospital: 0, avatar: 0, landmarks: 0 }, mgrFrac = 0, isReady = false;
+// entry needs the sky, the landmarks and your avatar; the hospital and other districts keep streaming after you enter
+function showProgress() {
+  if (isReady) return; const p = (loadParts.sky + loadParts.landmarks + loadParts.avatar + mgrFrac) / 4;
+  for (const id of ['loadBar', 'loadBar2']) { const e = $(id); if (e) e.style.width = Math.round(p * 100) + '%'; }
+  const msg = p < 0.72 ? 'Preparing your world…' : 'Your future is almost ready.'; for (const id of ['goLbl', 'goLbl2']) { const e = $(id); if (e) e.textContent = msg; }
+  $('loadTxt').textContent = `${msg} ${Math.round(p * 100)}%`;
+}
+const setLoad = (k, v) => { loadParts[k] = v; showProgress(); };
+manager.onProgress = (url, loaded, total) => { mgrFrac = Math.max(mgrFrac, total ? loaded / total : 0); showProgress(); };
 function fail(msg) { const e = $('err'); e.style.display = 'block'; e.textContent = msg; console.error(msg); }
 addEventListener('error', e => { if (e.message) fail('Error: ' + e.message); });
 
@@ -110,7 +119,7 @@ new RGBELoader(manager).load('assets/medcity/sky_1k.hdr', tex => {
 }, undefined, () => { setLoad('sky', 1); checkReady(); });
 
 // ------------------------------------------------------------------ build the city (procedural, no download)
-$('loadTxt').textContent = 'Building the city…';
+showProgress();
 buildStreets(ctx);
 const plaza = buildPlaza(ctx);
 buildMonorail(ctx);
@@ -161,6 +170,7 @@ const HOSP = { ox: -140, oz: -56.1 };
 const hospital = { ready: false, markers: {}, doors: [], interior: null };
 const gltfLoader = new GLTFLoader(manager);
 loadLandmarks(ctx, scene, gltfLoader).then(() => { setLoad('landmarks', 1); checkReady(); });
+function loadHospital() { if (loadHospital.started) return; loadHospital.started = true;
 gltfLoader.load('assets/medcity/medcity.glb', g => {
   const root = g.scene; root.position.set(HOSP.ox, 0, HOSP.oz); scene.add(root); root.updateMatrixWorld(true);
   loadHospitalUpgrade(root, gltfLoader);
@@ -196,10 +206,12 @@ gltfLoader.load('assets/medcity/medcity.glb', g => {
   // hospital workstations (triage kiosk, dosage bench, careers board) added into the shared world
   const nCol = ctx.colliders.length; const hx = furnishHospital(ctx, HOSP.ox, HOSP.oz); STATIONS.push(...hx.stations); PROS.push(...hx.npcs);
   ctx.batch.flush(scene); for (let i = nCol; i < ctx.colliders.length; i++) addCollider(ctx.colliders[i]);
-  hospital.ready = true; setLoad('hospital', 1); checkReady();
-}, undefined, () => { fail('Could not load the hospital model.'); });
+  hospital.ready = true; setLoad('hospital', 1); if (peopleStarted) spawnPros(); hospitalWaiters.splice(0).forEach(f => f());
+}, undefined, () => { console.warn('hospital model failed'); });
+}
+const hospitalWaiters = []; const whenHospital = f => hospital.ready ? f() : (hospitalWaiters.push(f), loadHospital());
 let heart = null, heartParts = [];
-gltfLoader.load('assets/medcity/heart.glb', h => { heart = h; if (hospital.ready) setupHeart(); });
+function loadHeart() { if (loadHeart.started) return; loadHeart.started = true; gltfLoader.load('assets/medcity/heart.glb', h => { heart = h; if (hospital.ready) setupHeart(); }); }
 
 // ------------------------------------------------------------------ doors (city + hospital)
 function updateDoors(dt) {
@@ -229,18 +241,17 @@ async function spawnChar(model) {
 ui.renderAvatars(chosen, id => { chosen = id; });
 // ------------------------------------------------------------------ V2 custom avatar + Avatar Studio
 const avatar = new AvatarModel(); let avatarChar = null;
-const studio = new AvatarStudio({ renderer, envMap: null, store: cfg => { progress.avatarV2 = cfg; store(); }, onDone: () => { studio.close(); $('go').click(); } });
+const studio = new AvatarStudio({ renderer, envMap: null, store: cfg => { progress.avatarV2 = cfg; store(); }, onDone: () => { studio.close(); if (player) returnFromStudio(); else enterWorld(pendingDest); } });
+let pendingDest = 'plaza';
 const avatarReady = avatar.init(progress.avatarV2).then(() => {
   avatarChar = new Character(avatar.gltf, { model: avatar.root, animations: avatar.animations });
   avatarChar.morphMeshes = avatar.meshes;
   let hip = 0.95; avatar.root.updateMatrixWorld(true); const pv = avatar.bones.pelvis; if (pv) { const v = new THREE.Vector3(); pv.getWorldPosition(v); hip = v.y; }
   avatarChar.baseScale = 0.93 / Math.max(0.3, hip); avatarChar.gaits.forEach(g => g.speed0 = g.speed);
   studio.attach(avatar, avatarChar); studio.applyHeight();
-  const b = $('studioBtn'); b.disabled = false; b.textContent = progress.avatarV2 ? 'Edit my avatar' : 'Create my avatar';
-  if (progress.avatarV2) $('avatarSummary').textContent = 'Your saved avatar is ready. You can edit it any time.';
+  setLoad('avatar', 1); checkReady();
   return avatarChar;
-}).catch(e => { console.error(e); const b = $('studioBtn'); b.textContent = 'Avatar Studio unavailable (using presets)'; $('avatars').style.display = 'grid'; return null; });
-$('studioBtn').onclick = () => { if (!avatarChar) return; studio.scene.environment = scene.environment; studio.open(); };
+}).catch(e => { console.error(e); setLoad('avatar', 1); checkReady(); return null; });
 function useCustomAvatar() {
   const c = avatarChar; const s = c.baseScale * avatar.cfg.height; c.leanG.scale.setScalar(s); c.leg = c.leg; for (const g of c.gaits) g.speed = (g.speed0 || g.speed) * s;
   c.speeds = { Walk: c.gaitSpeed('WalkG'), Jog: c.gaitSpeed('JogG'), Sprint: c.gaitSpeed('RunG'), Stroll: c.gaitSpeed('Stroll') };
@@ -263,10 +274,11 @@ addEventListener('keydown', e => {
   if (k === 'e' && mode === 'walk') { e.preventDefault(); interact(); }
   if (k === 'r' && mode === 'walk') { autoRun = !autoRun; ui.toast(autoRun ? 'Auto-run on (R to stop)' : 'Auto-run off'); }
   if (k === 'v' && mode === 'walk') { walkMode = !walkMode; ui.toast(walkMode ? 'Walking pace' : 'Jogging pace'); }
-  if (k === 'm' && mode === 'walk') ui.openMap(mapData());
-  else if (k === 'm' && mode === 'map') ui.closeMap();
+  if (wv.key(k)) { e.preventDefault(); return; }
+  if (k === 'm' && mode === 'walk') openWorldView();
+  else if (k === 'm' && mode === 'world') wv.close();
   if (k === ' ' && mode === 'talk') conv.skip();
-  if (k === 'escape') { if (mode === 'lab') closeLab(); else if (mode === 'talk') conv.end(); else ui.closeAll(); }
+  if (k === 'escape') { if (mode === 'lab') closeLab(); else if (mode === 'talk') conv.end(); else if (mode === 'studio') { studio.save(); studio.close(); returnFromStudio(); } else ui.closeAll(); }
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { P.route = []; P.routeCb = null; }
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -359,21 +371,27 @@ const capEl = document.getElementById('flyCap');
 function flyover(dt) {
   if (!settings.reduceMotion) flyT += dt / 7; const n = FLY.length, i = Math.floor(flyT) % n, j = (i + 1) % n; let u = flyT % 1; u = u * u * (3 - 2 * u);
   fA.fromArray(FLY[i].p).lerp(fB.fromArray(FLY[j].p), u); fC.fromArray(FLY[i].t).lerp(fD.fromArray(FLY[j].t), u);
+  if (camera.aspect < 1) fA.sub(fC).multiplyScalar(1 + (1 / camera.aspect - 1) * 0.55).add(fC); // portrait phones: pull back to keep the skyline in frame
   camera.position.lerp(fA, 1 - Math.exp(-dt * 2)); camTarget.lerp(fC, 1 - Math.exp(-dt * 2)); camera.lookAt(camTarget);
   if (capEl) { const k = flyT % 1; capEl.textContent = (k < 0.5 ? FLY[i] : FLY[j]).cap; capEl.style.opacity = Math.min(1, Math.abs(k - 0.5) * 4).toFixed(2); }
 }
 function introCam(dt) {
-  intro.t = Math.min(1, intro.t + dt / 2.6); const u = 1 - Math.pow(1 - intro.t, 3);
+  intro.start = intro.start || performance.now(); intro.t = Math.max(intro.t, Math.min(1, (performance.now() - intro.start) / 1000 / (intro.dur || 2.6))); /* wall-clock: slow devices don't stretch it */ const t = intro.t, u = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const goal = new THREE.Vector3(P.pos.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist, P.pos.y + 1.55 + Math.sin(camPitch) * camDist, P.pos.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist);
   const look = new THREE.Vector3(P.pos.x, P.pos.y + 1.55, P.pos.z);
-  camera.position.copy(intro.from).lerp(goal, u); const lt = intro.look.clone().lerp(look, u); camera.lookAt(lt);
-  if (intro.t >= 1) { intro = null; camTarget.copy(look); }
+  // quadratic arc: stay high over the plaza first, then descend to street level behind the avatar
+  const ctrl = new THREE.Vector3((intro.from.x + goal.x) / 2 * 0.4 + goal.x * 0.6, Math.max(intro.from.y, goal.y) * 0.85 + 6, (intro.from.z + goal.z) / 2 * 0.4 + goal.z * 0.6);
+  const a = (1 - u) * (1 - u), b = 2 * (1 - u) * u, c = u * u;
+  camera.position.set(intro.from.x * a + ctrl.x * b + goal.x * c, intro.from.y * a + ctrl.y * b + goal.y * c, intro.from.z * a + ctrl.z * b + goal.z * c);
+  const lt = intro.look.clone().lerp(look, Math.min(1, u * 1.3)); camera.lookAt(lt);
+  if (intro.t >= 1) { const d = intro.done; intro = null; camTarget.copy(look); d && d(); }
 }
 function updateCamera(dt) {
   if (photoCam) { camera.position.set(photoCam[0], photoCam[1], photoCam[2]); camera.lookAt(photoCam[3], photoCam[4], photoCam[5]); return; }
   if (mode === 'lab' && heartPivot) { labCamera(dt); return; }
   if (!player) { flyover(dt); return; }
   if (intro) { introCam(dt); return; }
+  if (wv.active) { wv.update(dt); return; }
   if (staging.cam && (mode === 'dialog' || mode === 'walk')) { stageCamera(dt); return; } else if (viewOff) { camera.clearViewOffset(); viewOff = false; camYaw = Math.atan2(camera.position.x - P.pos.x, camera.position.z - P.pos.z); }
   if (mode === 'talk' && conv.active && conv.active.n.c) { talkCamera(dt); return; }
   const inside = !!P.inside;
@@ -537,7 +555,10 @@ function updatePrompt() {
   let best = null, bd = 1e9;
   for (const it of interactables()) { if (!it.r) continue; const d = Math.hypot(it.x - P.pos.x, it.z - P.pos.z); if (d < it.r && d < bd) { bd = d; best = it; } }
   current = best; const pr = $('prompt');
-  if (best) { pr.style.display = 'flex'; pr.innerHTML = `<kbd>${isTouch ? 'E' : 'E'}</kbd><span>${best.label}</span>`; pr.onclick = () => interact(); } else pr.style.display = 'none';
+  if (best) { // contextual prompt: what it is + what tapping does
+    const parts = best.label.split(' · '), act = parts.pop().replace(/^Press E to /i, ''), title = parts.join(' · ');
+    const key = `${best.kind}:${best.label}`; if (pr.dataset.k !== key) { pr.dataset.k = key; pr.innerHTML = `<span class="pr-txt"><b>${title}</b><em>${act[0].toUpperCase() + act.slice(1)}</em></span><kbd>${isTouch ? 'Tap' : 'E'}</kbd>`; }
+    pr.style.display = 'flex'; pr.onclick = () => interact(); } else { pr.style.display = 'none'; pr.dataset.k = ''; }
 }
 function interact() {
   if (!current || mode !== 'walk') return; const it = current;
@@ -617,10 +638,11 @@ function updateBeacon(t) { const o = OBJ[objIdx]; const p = o && o.target && o.t
 
 // ------------------------------------------------------------------ professional NPCs + pedestrians
 const PRO_CHARS = []; const peds = [];
-async function spawnPeople() {
+let prosSpawned = 0, peopleStarted = false;
+function spawnPros() {
   // named staff get the V2 morph-target avatar (faces, blinking, lip sync); extras keep the lighter fixed models
-  const queue = [];
-  for (const p of PROS) { const n = { ...p }; PRO_CHARS.push(n);
+  const queue = []; const list = PROS.slice(prosSpawned); prosSpawned = PROS.length;
+  for (const p of list) { const n = { ...p }; PRO_CHARS.push(n);
     const cast = CAST[p.role]; if (cast) { queue.push(n); continue; }
     spawnChar(p.model).then(c => { n.c = c; c.root.position.set(p.x, p.y ?? 0.15, p.z); c.root.rotation.y = p.ry; n.baseRy = p.ry;
       c.idleClip = p.idle || ['Idle', 'FoldArms', 'Idle'][PRO_CHARS.indexOf(n) % 3]; if (!c.acts[c.idleClip]) c.idleClip = 'Idle';
@@ -629,6 +651,9 @@ async function spawnPeople() {
     const pp = P.pos; queue.sort((a, b) => Math.hypot(a.x - pp.x, a.z - pp.z) - Math.hypot(b.x - pp.x, b.z - pp.z));
     for (const n of queue) { try { const c = await spawnAvatarNpc(CAST[n.role].look); placeNpc(n, c); } catch (e) { console.warn('npc', n.role, e); spawnChar(n.model).then(c => placeNpc(n, c)).catch(() => {}); } }
   })();
+}
+async function spawnPeople() {
+  peopleStarted = true; spawnPros();
   // pedestrians on sidewalk loops around busy blocks
   const loops = [[0, 0, 2], [-130, -130, 2], [0, -130, 2], [130, -130, 1], [-130, 0, 1], [130, 0, 1], [0, 130, 1], [-130, 130, 1], [130, 130, 1]];
   const models = ['visitor_m', 'visitor_f', 'avatar_m1', 'avatar_f2', 'doctor', 'avatar_m2', 'receptionist', 'avatar_f1'].filter(m => m !== chosen);
@@ -743,7 +768,7 @@ function setupHeart() {
 }
 const labOrbit = { yaw: 0, pitch: 0.1, dist: 1.9 };
 function openLab() {
-  if (!heartPivot) { setupHeart(); if (!heartPivot) { ui.toast('Preparing the 3D heart…'); return; } }
+  if (!heartPivot) { loadHeart(); setupHeart(); if (!heartPivot) { ui.toast('Preparing the 3D heart…'); return; } }
   mode = 'lab'; event('lab:open'); ui.heart.open(() => closeLab(), (score, max) => { event('mission:med_heart'); });
 }
 function closeLab() { mode = 'walk'; ui.heart.close(); paintParts(null, null); }
@@ -762,7 +787,28 @@ function mapData() {
   return { districts: DISTRICTS, plaza: PLAZA, footprints: ctx.footprints, featured: FEATURED, labels: ctx.labels,
     player: player ? { x: P.pos.x, z: P.pos.z, yaw: P.yaw } : null, objective: (() => { const o = OBJ[objIdx]; return o && o.target && o.target(); })() };
 }
-$('mapBtn').onclick = () => { if (mode === 'walk') ui.openMap(mapData()); };
+$('mapBtn').onclick = () => { if (mode === 'walk') openWorldView(); };
+// ------------------------------------------------------------------ V3 World View + floating navigation
+const wv = new WorldView({ camera, scene, renderer, canvas, ctx, DISTRICTS, CAREERS, sun, FEATURED: () => FEATURED, STATIONS: () => STATIONS,
+  playerPos: () => player ? P.pos : null, setMode: m => { mode = m; }, getMode: () => mode,
+  walkTo: f => { if (f) goToBuilding(f); }, travelTo: f => { if (f) { whenHospital(() => {}); travelTo(f); } }, onClose: () => setNav('explore') });
+function openWorldView() { if (!player || intro) return; ui.closeAll(); if (conv.active) conv.end(); $('hintChip').hidden = true; P.route = []; P.speed = 0; setNav('world'); wv.open(); }
+function setNav(k) { document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === k)); }
+function resetCamera() { camYaw = P.yaw + Math.PI; camPitch = 0.32; camDist = 6.2; lastLook = -10; }
+function openAvatarStudioInWorld() {
+  if (!avatarChar || player !== avatarChar) return ui.toast('The Avatar Studio needs the custom avatar.'); ui.closeAll(); if (wv.active) wv.close();
+  studio.turn.add(avatarChar.root); avatarChar.root.position.set(0, 0, 0); avatarChar.root.rotation.set(0, 0, 0);
+  studio.scene.environment = scene.environment; mode = 'studio'; setNav('avatar');
+  studio.open('full', { enterLabel: 'Back to the city' });
+}
+function returnFromStudio() { useCustomAvatar(); player.root.position.copy(P.pos); player.root.rotation.y = P.yaw; mode = 'walk'; setNav('explore'); resetCamera(); }
+document.querySelectorAll('#nav [data-nav]').forEach(b => b.onclick = () => {
+  const k = b.dataset.nav; if (!player) return;
+  if (k === 'explore') { if (wv.active) return wv.close(); ui.closeAll(); if (conv.active) conv.end(); resetCamera(); setNav('explore'); }
+  if (k === 'world') { if (wv.active) wv.fit(); else openWorldView(); }
+  if (k === 'passport') { if (wv.active) wv.close(() => $('passBtn').onclick()); else { ui.closeAll(); $('passBtn').onclick(); } }
+  if (k === 'avatar') openAvatarStudioInWorld();
+});
 $('mini').onclick = () => { if (mode === 'walk') ui.openMap(mapData()); };
 
 // ------------------------------------------------------------------ audio (ambient city + footsteps), WebAudio, no files
@@ -794,28 +840,60 @@ $('sndBtn').onclick = () => { sndOn = !sndOn; $('sndBtn').textContent = sndOn ? 
 // ------------------------------------------------------------------ start
 let readyCount = 0;
 function checkReady() {
-  if (!loadParts.sky || !hospital.ready || !loadParts.landmarks) return;
-  perf.readyAt = performance.now(); $('loadTxt').textContent = 'City ready.'; const g = $('go'); g.disabled = false; g.textContent = 'Enter Talentopia →';
-  loadModel(chosen).catch(() => {}); // prefetch the chosen avatar
-  setupHeart();
+  if (isReady || !loadParts.sky || !loadParts.landmarks || !loadParts.avatar) return;
+  isReady = true; perf.readyAt = performance.now(); $('overlay').classList.add('live');
+  for (const id of ['go', 'goMed', 'studioBtn', 'goContinue', 'goWorld', 'goEdit']) $(id).disabled = false;
+  $('goLbl').textContent = 'Enter Talent City'; $('goLbl2').textContent = 'Continue Exploring'; $('loadTxt').textContent = 'Ready';
+  if (!avatarChar) loadModel(chosen).catch(() => {}); // fallback avatar
+  loadHospital(); // next priority: the nearest featured building
 }
-$('go').onclick = async () => {
-  const g = $('go'); g.disabled = true; g.textContent = 'Loading your avatar…'; audioStart();
+// ------------------------------------------------------------------ V3 onboarding: guest entry, ready-made avatar, returning visitors
+const returning = !!(progress.avatarV2 || progress.world);
+if (returning) { $('obWelcome').hidden = true; $('obBack').hidden = false; const n = Object.keys(progress.shifts || {}).length + (progress.done || []).length;
+  $('obBackSub').textContent = progress.xp ? `${progress.xp} XP earned so far. Your avatar and progress are saved on this device.` : 'Your avatar and progress are saved on this device.'; }
+setTimeout(() => { if (!isReady && !loadParts.sky) $('overlay').classList.add('live'); }, 9000); // never leave the poster up forever
+const openStudio = (m, dest) => { if (!avatarChar) return enterWorld(dest); pendingDest = dest; studio.scene.environment = scene.environment; studio.open(m, { onSkip: () => { studio.close(); enterWorld(dest); } }); };
+$('go').onclick = () => progress.avatarV2 ? enterWorld('plaza') : openStudio('quick', 'plaza');
+$('goMed').onclick = () => enterWorld('hospital');
+$('studioBtn').onclick = () => openStudio('full', 'plaza');
+$('goContinue').onclick = () => enterWorld('saved');
+$('goWorld').onclick = () => enterWorld('world');
+$('goEdit').onclick = () => openStudio('full', 'saved');
+$('goNew').onclick = () => { if (!confirm('Start fresh? This clears the avatar, XP and progress saved on this device.')) return; try { localStorage.removeItem(KEY); localStorage.removeItem('talentopiaVoice'); } catch (e) {} location.reload(); };
+// dest: 'plaza' (first visit), 'saved' (continue where you left off), 'hospital' (Explore MedCity), 'world' (straight into World View)
+async function enterWorld(dest = 'plaza') {
+  if (player) return; for (const id of ['go', 'goContinue']) $(id).disabled = true; audioStart();
   try {
     progress.avatar3d = chosen; store();
     const ac = await avatarReady; studio.close();
     player = ac ? useCustomAvatar() : await spawnChar(chosen); player.noLean = !!settings.reduceMotion;
-    const w = progress.world;
-    if (w && w.x > CITY.minX && w.x < CITY.maxX && w.z > CITY.minZ && w.z < CITY.maxZ) { P.pos.set(w.x, w.y || 0, w.z); P.yaw = w.yaw || 0; }
+    const w = progress.world, savedOk = w && w.x > CITY.minX && w.x < CITY.maxX && w.z > CITY.minZ && w.z < CITY.maxZ;
+    if ((dest === 'saved' || dest === 'world') && savedOk) { P.pos.set(w.x, w.y || 0, w.z); P.yaw = w.yaw || 0; }
     else { P.pos.set(plaza.spawn.x, plaza.P, plaza.spawn.z); P.yaw = plaza.spawn.ry; }
-    const q = new URLSearchParams(location.search).get('go'); if (q) { const f = FEATURED.find(x => x.id === q); if (f) { setTimeout(() => travelTo(f), 50); } }
     P.pos.y = groundAt(P.pos.x, P.pos.z, P.pos.y + 0.5); camYaw = P.yaw + Math.PI;
     player.root.position.copy(P.pos);
-    intro = { t: 0, from: camera.position.clone(), look: camTarget.clone() }; if (capEl) capEl.style.display = 'none'; document.body.classList.remove('intro');
-    $('overlay').style.display = 'none'; mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
-    spawnPeople(); spawnTraffic();
-  } catch (e) { fail('Could not load your avatar: ' + e.message); g.disabled = false; g.textContent = 'Try again'; }
-};
+    const quick = returning || settings.reduceMotion;
+    intro = { t: 0, dur: quick ? 1.6 : 3.4, from: camera.position.clone(), look: camTarget.clone() }; if (capEl) capEl.style.display = 'none'; document.body.classList.remove('intro');
+    const ov = $('overlay'); ov.classList.add('hidden'); setTimeout(() => { ov.style.display = 'none'; }, 300);
+    mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
+    spawnPeople(); spawnTraffic(); setTimeout(loadHeart, 6000);
+    const q = new URLSearchParams(location.search).get('go') || (dest === 'hospital' ? 'hospital' : null);
+    if (q) whenHospital(() => { const f = FEATURED.find(x => x.id === q); if (f) travelTo(f); });
+    intro.done = () => {
+      placeTitle(dest === 'hospital' ? 'MedCity' : returning ? 'Welcome back' : 'Welcome to Talentopia', dest === 'hospital' ? 'Medicine & health' : 'Talent City');
+      if (dest === 'world' && typeof openWorldView === 'function') setTimeout(() => openWorldView(), 400);
+      else setTimeout(showHint, 2600);
+    };
+  } catch (e) { fail('Could not load your avatar: ' + e.message + '. Check your connection and try again.'); for (const id of ['go', 'goContinue']) $(id).disabled = false; }
+}
+function placeTitle(main, sub) { const el = $('placeTitle'); el.innerHTML = `<small>${sub.toUpperCase()}</small>${main}`; el.classList.add('on'); clearTimeout(placeTitle.t); placeTitle.t = setTimeout(() => el.classList.remove('on'), 2400); }
+function showHint() {
+  if (progress.flags.hintSeen || mode !== 'walk') return; progress.flags.hintSeen = 1; store();
+  $('hintTxt').textContent = isTouch ? 'Use the joystick to walk · drag to look around' : 'WASD to walk · drag to look · E to interact';
+  const h = $('hintChip'); h.hidden = false; const hide = () => { h.hidden = true; }; $('hintX').onclick = hide; setTimeout(hide, 7000);
+}
+// tap or click during the entry glide skips it
+addEventListener('pointerdown', () => { if (intro && intro.t > 0.05) intro.t = Math.max(intro.t, 0.97); }, true);
 
 // ------------------------------------------------------------------ main loop
 let lowFps = 0;
@@ -828,7 +906,7 @@ function step(dtOverride) {
   for (const f of ctx.animated) f(elapsed, dt);
   updatePrompt(); updateBeacon(elapsed);
   // sun + shadow follow the avatar
-  const fp = player ? P.pos : camTarget; sun.position.set(fp.x + SUN_DIR.x * 160, SUN_DIR.y * 160, fp.z + SUN_DIR.z * 160); sun.target.position.set(fp.x, 0, fp.z);
+  const fp = player ? P.pos : camTarget; if (!wv.active) sun.position.set(fp.x + SUN_DIR.x * 160, SUN_DIR.y * 160, fp.z + SUN_DIR.z * 160); if (!wv.active) sun.target.position.set(fp.x, 0, fp.z);
   // interior lights follow the room you are in / nearest
   if (player) { const f = P.inside; roomLights.forEach((l, i) => { if (f) { const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2; l.position.set(cx + (i ? 1 : -1) * (f.x1 - f.x0) * 0.22, (f.floorH || 0.15) + (f.gfH || 5) - 1, cz + (i ? 1 : -1) * (f.z1 - f.z0) * 0.2); l.intensity += (60 - l.intensity) * 0.1; } else l.intensity *= 0.9; }); }
   // location label
@@ -860,8 +938,8 @@ function report() {
 }
 function drawDebug() { if (dbg.dataset.min) { dbg.innerHTML = `${perf.fps.toFixed(0)} fps · tap`; return; } dbg.innerHTML = report().replace(/</g, '&lt;') + '\n<button id="dbgCopy" style="margin-top:6px;padding:6px 10px;border-radius:8px;border:0;background:#8056F6;color:#fff;font:inherit">Copy report</button>';
   dbg.querySelector('#dbgCopy').onclick = () => { const t = report(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => ui.toast('Report copied, paste it to Claude')).catch(() => { prompt('Copy this report:', t); }); }; }
-function frame() { perfTick(); step(); requestAnimationFrame(frame); }
+function frame() { perfTick(); try { step(); } catch (e) { if ((frame.errs = (frame.errs || 0) + 1) < 4) console.error('frame error', e); } requestAnimationFrame(frame); } // one bad frame must never freeze the world
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, settings, applySettings, get preset() { return presetName; }, perf, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, wv, openWorldView, enterWorld, settings, applySettings, get preset() { return presetName; }, perf, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
