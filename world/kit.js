@@ -53,9 +53,9 @@ export class Instancer {
   constructor() { this.parts = new Map(); }
   add(name, partsFn, m) { if (!this.parts.has(name)) this.parts.set(name, { parts: partsFn(), ms: [] }); this.parts.get(name).ms.push(m); }
   flush(parent) {
-    for (const { parts, ms } of this.parts.values()) for (const [geo, mat, shadow = true] of parts) {
+    for (const { parts, ms } of this.parts.values()) for (const [geo, mat, shadow = true, depthMat = null] of parts) {
       const im = new THREE.InstancedMesh(geo, mat, ms.length); ms.forEach((m, i) => im.setMatrixAt(i, m));
-      im.castShadow = shadow; im.receiveShadow = true; im.computeBoundingSphere(); parent.add(im);
+      im.castShadow = shadow; im.receiveShadow = true; if (depthMat) im.customDepthMaterial = depthMat; im.computeBoundingSphere(); parent.add(im);
     }
   }
 }
@@ -68,8 +68,10 @@ export function initMaterials(envIntensity = 1) {
   const P = TX.pbr;
   mats.asphalt = std({ ...P('asphalt_02', 6), color: 0x8a8d92, roughness: 0.92 });
   mats.sidewalk = std({ ...P('concrete_pavement', 3), color: 0xd8d4cc, roughness: 0.85 });
-  mats.plaza = std({ ...P('white_sandstone_bricks', 3), color: 0xe8e2d6, roughness: 0.8 });
+  mats.plaza = std({ ...P('concrete_pavement', 1.6), color: 0xe9e0d2, roughness: 0.85 });
+  mats.pavers = std({ ...P('white_sandstone_bricks', 1.2), color: 0xdcd2c2, roughness: 0.85 });
   mats.grass = std({ ...P('aerial_grass_rock', 8), color: 0x9fbf7a, roughness: 1 });
+  mats.meadow = std({ map: TX.meadowTex(), roughness: 1 });
   mats.marble = std({ ...P('marble_tiles', 2.5), roughness: 0.25 });
   mats.parquet = std({ ...P('herringbone_parquet', 2.5), roughness: 0.55 });
   mats.concrete = std({ ...P('brushed_concrete', 4), color: 0xcfcac2, roughness: 0.8 });
@@ -91,7 +93,7 @@ export function initMaterials(envIntensity = 1) {
   mats.water = new THREE.MeshPhysicalMaterial({ color: 0x5f93a8, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.88, envMapIntensity: 1.4 });
   mats.leaf = std({ color: 0x4f7a36, roughness: 0.85 });
   mats.leaf2 = std({ color: 0x648f40, roughness: 0.85 });
-  mats.leaf3 = std({ color: 0x3f6a33, roughness: 0.85 });
+  mats.leaf3 = std({ color: 0x3b5a2c, roughness: 0.95 });
   mats.bark = std({ color: 0x6b5442, roughness: 1 });
   mats.violet = std({ color: 0x8056f6, emissive: 0x8056f6, emissiveIntensity: 0.6, roughness: 0.4 });
   mats.cyan = std({ color: 0x51c9e8, emissive: 0x51c9e8, emissiveIntensity: 0.8, roughness: 0.4 });
@@ -168,24 +170,53 @@ export function sign(ctx, text, x, y, z, ry, height = 1.2, o = {}) {
 }
 export function faceSign(ctx, b, face, text, y, height, o = {}) {
   const [x, z] = onFace(b, face, o.t || 0, 0.09); sign(ctx, text, x, y, z, FACE[face][2], height, o);
+  if (o.door === false || y > 16) return;
+  // entrance: framed glass doors + a cantilevered canopy on the signed face
+  const ry = FACE[face][2], [dx, dz] = onFace(b, face, o.t || 0, 0.12), [cx, cz] = onFace(b, face, o.t || 0, 0.95);
+  ctx.geo(ubox(2.6, 2.8, 0.06), M('glassClear'), mat4(dx, 0.15 + 1.4, dz, ry), false);
+  ctx.geo(ubox(2.8, 0.14, 0.12), M('metalDark'), mat4(dx, 0.15 + 2.85, dz, ry));
+  for (const sd of [-1.35, 0, 1.35]) ctx.geo(ubox(0.08, 2.8, 0.1), M('metalDark'), mat4(dx + Math.cos(ry) * sd, 0.15 + 1.4, dz - Math.sin(ry) * sd, ry));
+  ctx.geo(ubox(4.2, 0.16, 1.8), M('metalLight'), mat4(cx, 3.35, cz, ry));
+  ctx.geo(ubox(4.2, 0.02, 1.8), M('lampHead'), mat4(cx, 3.26, cz, ry), false);
 }
 
 // ------------------------------------------------------------------ building massing
 // Generic massing block with collider + roof details.
-export function mass(ctx, { x, z, w, d, y0 = 0, h, mat, roofMat = M('roof'), parapet = 0.9, units = true, collide = true, seed = 1 }) {
+export function mass(ctx, { x, z, w, d, y0 = 0, h, mat, roofMat = M('roof'), parapet = 0.9, units = true, collide = true, seed = 1, grid = null, base = null }) {
   ctx.box(x, y0, z, w, h, d, mat, { vOff: y0 });
   if (collide && y0 < 2.5) ctx.collider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, y0, y0 + h);
   const top = y0 + h;
   ctx.box(x, top, z, w - 0.1, 0.05, d - 0.1, roofMat, { shadow: false });
-  if (parapet) { // parapet ring
+  if (parapet) { // parapet ring with a metal coping
     const t = 0.35;
     ctx.box(x, top, z - d / 2 + t / 2, w, parapet, t, M('charcoal')); ctx.box(x, top, z + d / 2 - t / 2, w, parapet, t, M('charcoal'));
     ctx.box(x - w / 2 + t / 2, top, z, t, parapet, d - 2 * t, M('charcoal')); ctx.box(x + w / 2 - t / 2, top, z, t, parapet, d - 2 * t, M('charcoal'));
+    ctx.box(x, top + parapet, z, w + 0.06, 0.06, d + 0.06, M('metalLight'), { shadow: false });
   }
-  if (units && w > 8 && d > 8) { // rooftop mechanical units
-    const r = TX.rng(seed + (x * 7 + z * 13 | 0));
+  const r = TX.rng(seed + (x * 7 + z * 13 | 0));
+  if (units && w > 8 && d > 8) { // rooftop plant: units, a water tank, maybe a mast
     const n = 1 + (r() * 3 | 0);
     for (let i = 0; i < n; i++) { const uw = 2 + r() * 4, ud = 2 + r() * 3; ctx.box(x + (r() - 0.5) * (w - uw - 2), top, z + (r() - 0.5) * (d - ud - 2), uw, 1.2 + r() * 1.6, ud, M('metalLight')); }
+    if (r() < 0.55) { const tx = x + (r() - 0.5) * (w - 5), tz = z + (r() - 0.5) * (d - 5); ctx.geo(ucyl(1.3, 1.3, 2.2, 16), M('offwhite'), mat4(tx, top + 2.3, tz)); for (const [lx, lz] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) ctx.box(tx + lx, top, tz + lz, 0.12, 1.2, 0.12, M('metalDark')); }
+    if (h > 38 && r() < 0.6) ctx.geo(ucyl(0.08, 0.15, 7, 6), M('metalDark'), mat4(x + w * 0.25, top + 3.5, z - d * 0.2));
+  }
+  // curtain-wall mullions and floor lines with real depth
+  if (grid) {
+    const { bay = 1.6, floor = 4, m = M('metalDark') } = grid, dep = 0.07, th = 0.09;
+    for (const [fx, fz, along, other] of [[0, 1, w, d], [0, -1, w, d], [1, 0, d, w], [-1, 0, d, w]]) {
+      for (let t = 0; t <= along + 0.01; t += bay) { const off = -along / 2 + t;
+        const px = fz ? x + off : x + fx * (w / 2 + dep / 2), pz = fz ? z + fz * (d / 2 + dep / 2) : z + off;
+        ctx.box(px, y0, pz, fz ? th : dep, h, fz ? dep : th, m, { shadow: false }); }
+      for (let yy = y0 + floor; yy < top - 0.5; yy += floor) { const px = fz ? x : x + fx * (w / 2 + dep / 2), pz = fz ? z + fz * (d / 2 + dep / 2) : z;
+        ctx.box(px, yy - 0.06, pz, fz ? along + 0.1 : dep, 0.12, fz ? dep : along + 0.1, m, { shadow: false }); }
+    }
+  }
+  // ground-floor storefront: stone plinth, tall dark glazing, transom band
+  const wantBase = base ?? (y0 === 0 && h >= 8 && w >= 8 && d >= 8);
+  if (wantBase) {
+    ctx.box(x, 0, z, w + 0.16, 0.55, d + 0.16, M('concrete'));
+    ctx.box(x, 0.55, z, w + 0.1, 3.9, d + 0.1, glassMat({ tint: [40, 52, 64], bays: 2, floors: 1, bayW: 2.4, floorH: 3.9, seed: 99, warm: 0.6, spandrel: false, mullion: '#1a1d22' }), { vOff: 0 });
+    ctx.box(x, 4.45, z, w + 0.2, 0.5, d + 0.2, M('charcoal'));
   }
   ctx.foot(x, z, w, d, ctx._footColor || '#cfc9bd');
 }
@@ -321,24 +352,58 @@ export function dome(ctx, { x, z, r = 10 }) {
 }
 
 // ------------------------------------------------------------------ props (instanced)
+// Card-foliage trees: trunk + branches, and a canopy of crossed leaf-cluster cards with normals bent outward from the crown
+// centre (soft, volumetric lighting), alpha-tested (including shadows), with a gentle wind sway in the vertex shader.
+export const WIND = { value: 0 };
+let leafMat = null, leafDepth = null;
+function leafMaterials() {
+  if (leafMat) return [leafMat, leafDepth];
+  const map = TX.leafTex();
+  leafMat = new THREE.MeshStandardMaterial({ map, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.82, metalness: 0 });
+  const sway = (shader) => { shader.uniforms.uWind = WIND;
+    shader.vertexShader = 'uniform float uWind;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec4 ip = instanceMatrix[3];
+      #else
+        vec4 ip = vec4(0.0);
+      #endif
+      float h = max(0.0, position.y - 2.5);
+      transformed.x += sin(uWind * 1.3 + ip.x * 0.37 + position.y * 0.6) * 0.035 * h;
+      transformed.z += cos(uWind * 1.1 + ip.z * 0.29 + position.x * 0.5) * 0.03 * h;`); };
+  leafMat.onBeforeCompile = sway;
+  leafDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.45, side: THREE.DoubleSide });
+  leafDepth.onBeforeCompile = sway;
+  return [leafMat, leafDepth];
+}
+const SPECIES = [ // [crown centre height, radii x/y/z, cards, trunk height]
+  { cy: 4.6, rx: 2.3, ry: 1.9, rz: 2.3, n: 110, th: 3.2 },   // round deciduous
+  { cy: 5.6, rx: 1.3, ry: 3.2, rz: 1.3, n: 95, th: 2.6 },   // columnar
+  { cy: 4.4, rx: 3.0, ry: 1.7, rz: 3.0, n: 130, th: 3.0 },   // wide plane tree
+];
 const treeParts = (v) => () => {
-  const r = TX.rng(17 + v * 31);
-  const trunkH = 3.0 + r() * 0.8;
-  const trunk = new THREE.CylinderGeometry(0.11, 0.2, trunkH, 8); trunk.translate(0, trunkH / 2, 0);
+  const r = TX.rng(17 + v * 31), sp = SPECIES[v % 3];
+  const trunk = new THREE.CylinderGeometry(0.1, 0.2, sp.th + 1.2, 8); trunk.translate(0, (sp.th + 1.2) / 2, 0);
   const branches = [trunk.toNonIndexed()];
-  for (let i = 0; i < 3; i++) { const b = new THREE.CylinderGeometry(0.04, 0.08, 1.6, 5); b.translate(0, 0.8, 0); b.rotateZ(0.7 + r() * 0.3); b.rotateY(i * 2.1 + r()); b.translate(0, trunkH - 0.6, 0); branches.push(b.toNonIndexed()); }
-  // layered canopy: many small displaced clumps, smooth shaded, slightly varied tint
-  const crowns = [];
-  const n = 9 + (r() * 4 | 0);
-  for (let i = 0; i < n; i++) {
-    const rad = 0.75 + r() * 0.55; const c = new THREE.IcosahedronGeometry(rad, 1); const p = c.attributes.position;
-    for (let k = 0; k < p.count; k++) { const x = p.getX(k), y = p.getY(k), z = p.getZ(k); const nz = 1 + 0.18 * Math.sin(x * 5.1 + v) * Math.cos(z * 4.3) + 0.1 * Math.sin(y * 7.7); p.setXYZ(k, x * nz, y * nz * 0.82, z * nz); }
-    const a = r() * Math.PI * 2, d = r() * 1.5; c.translate(Math.cos(a) * d, trunkH + 0.4 + r() * 1.9 - d * 0.35, Math.sin(a) * d);
-    crowns.push(c.toNonIndexed());
+  for (let i = 0; i < 5; i++) { const L = 1.2 + r() * 1.2; const b = new THREE.CylinderGeometry(0.03, 0.08, L, 5); b.translate(0, L / 2, 0); b.rotateZ(0.5 + r() * 0.5); b.rotateY(i * 1.26 + r()); b.translate(0, sp.th - 0.2 + r() * 1.0, 0); branches.push(b.toNonIndexed()); }
+  // leaf cards
+  const pos = [], nor = [], uv = [];
+  const C = new THREE.Vector3(0, sp.cy, 0), q = new THREE.Quaternion(), e = new THREE.Euler();
+  for (let i = 0; i < sp.n; i++) {
+    // point inside the crown ellipsoid, biased to the surface
+    let x, y, z; do { x = r() * 2 - 1; y = r() * 2 - 1; z = r() * 2 - 1; } while (x * x + y * y + z * z > 1);
+    const k = 0.35 + 0.65 * Math.pow(r(), 0.35); const P = new THREE.Vector3(x * sp.rx * k, sp.cy + y * sp.ry * k, z * sp.rz * k);
+    const size = 1.3 + r() * 1.1; e.set(r() * Math.PI, r() * Math.PI * 2, r() * Math.PI); q.setFromEuler(e);
+    const qv = (r() * 2 | 0), qu = (r() * 2 | 0); // atlas quadrant
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3(a * size / 2, b * size / 2, 0).applyQuaternion(q).add(P));
+    const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([a, b]) => [(qu + a) / 2, (qv + b) / 2]);
+    for (const idx of [0, 1, 2, 0, 2, 3]) { const p = corners[idx]; pos.push(p.x, p.y, p.z); const n = p.clone().sub(C); n.y *= 0.6; n.normalize(); nor.push(n.x, n.y + 0.25, n.z); uv.push(...uvs[idx]); }
   }
-  crowns.forEach(c => { c.deleteAttribute('normal'); c.deleteAttribute('uv'); });
-  const crown = mergeVertices(mergeGeometries(crowns), 1e-3); crown.computeVertexNormals();
-  return [[mergeGeometries(branches), M('bark')], [crown, M(['leaf', 'leaf2', 'leaf3'][v % 3])]];
+  const leaves = new THREE.BufferGeometry(); leaves.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); leaves.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); leaves.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  leaves.computeBoundingSphere();
+  // a dark inner volume so the canopy never looks see-through
+  const core = new THREE.IcosahedronGeometry(1, 1); core.scale(sp.rx * 0.38, sp.ry * 0.38, sp.rz * 0.38); core.translate(0, sp.cy, 0);
+  const [lm, ld] = leafMaterials();
+  return [[mergeGeometries(branches), M('bark')], [core, M('leaf3')], [leaves, lm, true, ld]];
 };
 export function treeAt(ctx, x, z, s = 1, y = 0) { const v = (Math.abs(x * 3 + z * 7) | 0) % 3; ctx.inst.add('tree' + v, treeParts(v), mat4(x, y, z, (x * 13 + z) % 6.28, s, s, s)); if (y < 1) ctx.collider(x - 0.3, x + 0.3, z - 0.3, z + 0.3, 0, 3); }
 export function lampAt(ctx, x, z, ry = 0) {

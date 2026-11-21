@@ -96,7 +96,7 @@ export function createUI({ progress, store, onTravel }) {
         const d = api.dialog(m.who, `<b>Step ${i + 1}/${m.steps.length}.</b> ${s.q}${msg || ''}`, []);
         const o = d.querySelector('.opts'); o.innerHTML = `<div class="row"><input type="number" id="numIn" placeholder="grams"> <button class="primary" id="numGo">Check</button></div>`;
         const go = () => { const v = +$('numIn').value; if (Math.abs(v - s.c) < 0.5) { if (first) score++; next(`<div class="task ok" style="margin-top:8px">✓ ${s.e}</div>`); } else { first = false; step(`<div class="task no" style="margin-top:8px">Not quite. Try again: what is 300 ÷ 6 × 10?</div>`); } };
-        $('numGo').onclick = go; $('numIn').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') go(); }; setTimeout(() => $('numIn').focus(), 50); return;
+        $('numGo').onclick = go; $('numIn').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') go(); }; setTimeout(() => { const n = $('numIn'); if (n) n.focus(); }, 50); return;
       }
       const order = s.a.map((_, k) => k).sort(() => Math.random() - 0.5);
       api.dialog(m.who, `<b>Step ${i + 1}/${m.steps.length}.</b> ${s.q}${msg || ''}`, order.map(k => ({ label: s.a[k], fn: (b) => {

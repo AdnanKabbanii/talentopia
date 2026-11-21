@@ -3,9 +3,13 @@
 import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Ctx, initMaterials, M, makeCar, Batch } from './kit.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Ctx, initMaterials, M, makeCar, Batch, WIND } from './kit.js';
 import * as TX from './textures.js';
-import { buildStreets, buildPlaza, buildMonorail, buildNav, findPath, nearestSidewalk, ROUTES, polyline, blockLoop, CITY } from './city.js';
+import { buildStreets, buildPlaza, buildMonorail, buildNav, findPath, nearestSidewalk, ROUTES, polyline, blockLoop, CITY, buildSignals, buildBackdrop, SIGNAL, XS, ZS, HALF } from './city.js';
 import { buildDistricts, DISTRICTS, PLAZA, districtAt } from './districts.js';
 import { furnish, furnishHospital } from './interiors.js';
 import { loadModel, Character } from './characters.js';
@@ -31,18 +35,29 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 TX.setAniso(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xd6e0ea, 220, 900);
+scene.fog = new THREE.Fog(0xd3dde8, 260, 2100);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.15, 2500);
 camera.position.set(0, 40, 120);
 const hemi = new THREE.HemisphereLight(0xe3ecff, 0x8f8270, 0.55); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0dc, 2.7); sun.castShadow = true;
-sun.shadow.mapSize.set(isSmall ? 1024 : 2048, isSmall ? 1024 : 2048);
-Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 400 });
+sun.shadow.mapSize.set(isSmall ? 2048 : 4096, isSmall ? 2048 : 4096);
+Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 10, far: 420 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; scene.add(sun); scene.add(sun.target);
 const SUN_DIR = new THREE.Vector3(0.55, 1, 0.35).normalize();
 // two pooled interior lights that follow the nearest interior (keeps the light count fixed, no shader recompiles)
 const roomLights = [new THREE.PointLight(0xfff4e6, 0, 26, 1.6), new THREE.PointLight(0xfff4e6, 0, 26, 1.6)]; roomLights.forEach(l => scene.add(l));
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+// post-processing: ground-truth ambient occlusion (desktop), tone mapping + sRGB in the output pass
+let composer = null, gtao = null;
+if (!isTouch && new URLSearchParams(location.search).get('ao') !== '0') {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
+  gtao.output = GTAOPass.OUTPUT.Default; gtao.blendIntensity = 0.9;
+  gtao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
+  gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 12 });
+  composer.addPass(gtao); composer.addPass(new OutputPass());
+}
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
 // ------------------------------------------------------------------ loading
 const manager = new THREE.LoadingManager();
@@ -68,6 +83,8 @@ $('loadTxt').textContent = 'Building the city…';
 buildStreets(ctx);
 const plaza = buildPlaza(ctx);
 buildMonorail(ctx);
+buildSignals(ctx);
+buildBackdrop(ctx);
 buildDistricts(ctx);
 const FEATURED = ctx.featured; // [{id,name,district,x0,x1,z0,z1,entrance,inside,face,...}]
 const STATIONS = [], PROS = [];
@@ -263,7 +280,9 @@ function updatePlayer(dt) {
 
 // ------------------------------------------------------------------ camera
 const camRay = new THREE.Ray(), hitV = new THREE.Vector3(), tmp = new THREE.Vector3(), box = new THREE.Box3();
+let photoCam = null;
 function updateCamera(dt) {
+  if (photoCam) { camera.position.set(photoCam[0], photoCam[1], photoCam[2]); camera.lookAt(photoCam[3], photoCam[4], photoCam[5]); return; }
   if (mode === 'lab' && heartPivot) { labCamera(dt); return; }
   if (!player) { const t = performance.now() / 1000; camera.position.set(Math.sin(t * 0.05) * 260, 120, Math.cos(t * 0.05) * 260); camera.lookAt(0, 20, 0); return; }
   const inside = !!P.inside;
@@ -275,7 +294,7 @@ function updateCamera(dt) {
   // keep the camera in front of walls between it and the avatar
   const dir = cp.clone().sub(camTarget); const len = dir.length(); dir.normalize(); camRay.set(camTarget, dir); let best = len;
   for (const b of colGrid.near((cp.x + camTarget.x) / 2, (cp.z + camTarget.z) / 2, len / 2 + 2)) {
-    if (b.y1 < 2.2 || (b.door && b.open)) continue; box.min.set(b.x0, b.y0, b.z0); box.max.set(b.x1, b.y1, b.z1);
+    if (b.y1 < 2.2 || (b.door && b.open) || (b.x1 - b.x0 < 1.3 && b.z1 - b.z0 < 1.3)) continue; box.min.set(b.x0, b.y0, b.z0); box.max.set(b.x1, b.y1, b.z1);
     if (camRay.intersectBox(box, hitV)) { const d = hitV.distanceTo(camTarget); if (d < best) best = Math.max(0.6, d - 0.25); }
   }
   camera.position.copy(camTarget).addScaledVector(dir, best);
@@ -513,6 +532,10 @@ function updateTraffic(dt) {
     const [, , h2] = c.pl.at(c.s + 10); if (Math.abs(angDiff(h, h2)) > 0.3) want = Math.min(want, 4.5);
     // brake for cars and people ahead
     const check = (px, pz, gap) => { const dx = px - x, dz = pz - z; const along = dx * fx + dz * fz, side = Math.abs(dx * fz - dz * fx); if (along > 0 && along < gap && side < 2.2) want = Math.min(want, Math.max(0, (along - c.L * 0.6 - 2.5) * 0.9)); };
+    // traffic signals: stop at the line on amber/red
+    { const ew = Math.abs(fx) > 0.7, sgn = ew ? Math.sign(fx) : Math.sign(fz), pos = ew ? x : z, lines = ew ? XS : ZS; let best = null;
+      for (const L of lines) { const stop = L - sgn * (HALF + 1.2); const dist = (stop - pos) * sgn; if (dist > -0.5 && dist < 40 && (best === null || dist < best)) best = dist; }
+      const st = SIGNAL.state(ew ? 'ew' : 'ns', elapsed); if (best !== null && st !== 'g' && !(st === 'a' && best < 6)) want = Math.min(want, Math.max(0, best - 0.5) * 0.7); }
     for (const o of cars) if (o !== c) { const [ox, oz] = o.pl.at(o.s); check(ox, oz, 14); }
     if (pp) check(pp.x, pp.z, 12);
     for (const p of peds) if (p.c && p.c.root.visible) check(p.c.root.position.x, p.c.root.position.z, 9);
@@ -611,10 +634,12 @@ $('go').onclick = async () => {
 };
 
 // ------------------------------------------------------------------ main loop
+let lowFps = 0;
 const clock = new THREE.Clock(); let elapsed = 0, lastWhere = '', frames = 0, fpsT = 0;
 function step(dtOverride) {
   const dt = dtOverride || Math.min(clock.getDelta(), 1 / 20); elapsed += dt;
   updatePlayer(dt); updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
+  WIND.value = elapsed;
   for (const f of ctx.animated) f(elapsed, dt);
   updatePrompt(); updateBeacon(elapsed);
   // sun + shadow follow the avatar
@@ -625,11 +650,12 @@ function step(dtOverride) {
   if (player && !P.inside) { const d = districtAt(P.pos.x, P.pos.z); const nm = d ? d.name : 'Talentopia'; if (nm !== lastWhere) { lastWhere = nm; ui.setWhere(nm, d && d.color ? d.color : '#8056F6'); if (d && d.id) event('district:' + d.id); } }
   else if (P.inside) lastWhere = '';
   if (player) ui.drawMini(mapData());
-  renderer.render(scene, camera);
-  frames++; fpsT += dt; if (fpsT > 1) { window.__fps = frames / fpsT; frames = 0; fpsT = 0; }
+  if (composer) composer.render(dt); else renderer.render(scene, camera);
+  frames++; fpsT += dt; if (fpsT > 1) { window.__fps = frames / fpsT; frames = 0; fpsT = 0;
+    if (composer && !document.hidden && window.__fps < 32) { lowFps = (lowFps || 0) + 1; if (lowFps > 4) { composer = null; ui.toast('Reduced effects for smoother movement'); } } else lowFps = 0; }
 }
 function frame() { step(); requestAnimationFrame(frame); }
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, ctx, colGrid, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };

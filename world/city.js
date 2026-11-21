@@ -1,5 +1,6 @@
 // City layout: street grid, sidewalks, crosswalks, Central Plaza, monorail, navigation graph, traffic + pedestrian routes.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { M, mat4, ubox, ucyl, lampAt, treeAt, benchAt, planterAt, busStop, sign, signMat, glassMat, mass, bands, umbrellaTable } from './kit.js';
 
 export const PITCH = 130, ROAD = 9, SIDE = 3.5, HALF = ROAD / 2 + SIDE; // street corridor half-width = 8
@@ -11,7 +12,7 @@ export const CITY = { minX: -340, maxX: 420, minZ: -215, maxZ: 215 };
 
 export function buildStreets(ctx) {
   // base ground (beyond the city: grass), city blocks paved / landscaped by the districts
-  ctx.box(40, -0.2, 0, 1400, 0.2, 1000, M('grass'), { shadow: false });
+  ctx.box(40, -0.2, 0, 4200, 0.2, 4200, M('meadow'), { shadow: false });
   // roadways
   const road = (x, z, w, d) => { ctx.box(x, 0, z, w, 0.02, d, M('asphalt'), { shadow: false }); };
   for (const z of ZS) road((X0 + X1) / 2, z, X1 - X0 + ROAD, ROAD);
@@ -244,3 +245,46 @@ export const ROUTES = [laneLoop(-195, 195, -65, 65, true), laneLoop(-325, 195, -
 
 // pedestrian sidewalk loop around a block (centre cx,cz)
 export function blockLoop(cx, cz, inset = 58.0) { return [[cx - inset, cz - inset], [cx + inset, cz - inset], [cx + inset, cz + inset], [cx - inset, cz + inset]]; }
+
+// ------------------------------------------------------------------ traffic signals (cars obey them) + street furniture
+export const SIGNAL = { cycle: 24, state(axis, t) { const c = t % 24; if (axis === 'ew') return c < 10 ? 'g' : c < 12 ? 'a' : 'r'; return c >= 12 && c < 22 ? 'g' : c >= 22 ? 'a' : 'r'; } };
+export function buildSignals(ctx) {
+  const lamp = (hex) => new THREE.MeshStandardMaterial({ color: 0x222222, emissive: hex, emissiveIntensity: 0, roughness: 0.4 });
+  const L = { ew: { r: lamp(0xff2a1a), a: lamp(0xffb000), g: lamp(0x22ff66) }, ns: { r: lamp(0xff2a1a), a: lamp(0xffb000), g: lamp(0x22ff66) } };
+  const sph = new THREE.SphereGeometry(0.11, 10, 8);
+  const head = (x, z, ry, axis) => { // housing faces direction ry (toward the approaching driver)
+    ctx.geo(ubox(0.36, 1.0, 0.25), M('charcoal'), mat4(x, 3.3, z, ry));
+    ['r', 'a', 'g'].forEach((k, i) => ctx.geo(sph, L[axis][k], mat4(x + Math.sin(ry) * 0.14, 3.62 - i * 0.32, z + Math.cos(ry) * 0.14, ry), false));
+  };
+  for (const x of XS) for (const z of ZS) {
+    const o = ROAD / 2 + 0.7;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const px = x + sx * o, pz = z + sz * o; ctx.box(px, 0.15, pz, 0.14, 3.0, 0.14, M('metalDark')); ctx.collider(px - 0.12, px + 0.12, pz - 0.12, pz + 0.12, 0, 3);
+      // right-hand traffic: the head on the far-right corner faces the oncoming cars of each axis
+      head(px, pz, sz > 0 ? 0 : Math.PI, 'ns'); head(px, pz, sx > 0 ? Math.PI / 2 : -Math.PI / 2, 'ew');
+    }
+  }
+  ctx.animated.push(t => { for (const ax of ['ew', 'ns']) { const st = SIGNAL.state(ax, t); for (const k of ['r', 'a', 'g']) L[ax][k].emissiveIntensity = st === k ? 2.2 : 0; } });
+  // bollards, bins, hydrants and bike racks
+  const bollard = (x, z) => ctx.inst.add('bollard', () => { const g = new THREE.CylinderGeometry(0.1, 0.12, 0.9, 10); g.translate(0, 0.45, 0); const c = new THREE.CylinderGeometry(0.105, 0.105, 0.06, 10); c.translate(0, 0.75, 0); return [[g, M('charcoal')], [c, M('metalLight')]]; }, mat4(x, 0.15, z));
+  const bin = (x, z) => { ctx.inst.add('bin', () => { const g = new THREE.CylinderGeometry(0.28, 0.25, 0.95, 14); g.translate(0, 0.47, 0); const l = new THREE.CylinderGeometry(0.3, 0.3, 0.06, 14); l.translate(0, 0.97, 0); return [[g, M('navy')], [l, M('metalLight')]]; }, mat4(x, 0.15, z)); ctx.collider(x - 0.3, x + 0.3, z - 0.3, z + 0.3, 0, 1); };
+  const hydrant = (x, z) => ctx.inst.add('hydrant', () => { const g = new THREE.CylinderGeometry(0.13, 0.16, 0.7, 10); g.translate(0, 0.35, 0); const t = new THREE.SphereGeometry(0.14, 10, 6); t.translate(0, 0.72, 0); return [[mergeGeometries([g.toNonIndexed(), t.toNonIndexed()]), M('red')]]; }, mat4(x, 0.15, z));
+  for (const x of XS) for (const z of ZS) {
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      for (let i = 0; i < 3; i++) { bollard(x + sx * (ROAD / 2 + 0.45), z + sz * (ROAD / 2 + 2.2 + i * 1.1)); bollard(x + sx * (ROAD / 2 + 2.2 + i * 1.1), z + sz * (ROAD / 2 + 0.45)); }
+    }
+    if ((x + z) % 260 === 0) hydrant(x + HALF - 1.2, z + ROAD / 2 + 3.5);
+    bin(x - HALF + 1.0, z - ROAD / 2 - 3.6);
+  }
+  for (const [x, z] of [[-30, 36], [30, 36], [-36, -30], [36, -30]]) for (let i = 0; i < 4; i++) ctx.inst.add('bikerack', () => { const g = new THREE.TorusGeometry(0.4, 0.03, 6, 16, Math.PI); g.translate(0, 0.0, 0); return [[g, M('metalLight')]]; }, mat4(x + i * 0.8, 0.75, z, Math.PI / 2));
+}
+// ------------------------------------------------------------------ horizon: rolling hills + far mountains (fogged)
+export function buildBackdrop(ctx) {
+  const ring = (r0, r1, hMin, hMax, seg, color, seed) => {
+    const g = new THREE.RingGeometry(r0, r1, seg, 6); const p = g.attributes.position; const rr = (a, b) => Math.sin(a * 3.1 + seed) * 0.5 + Math.sin(a * 7.3 + seed * 2) * 0.3 + Math.sin(a * 13.7 + seed * 3) * 0.2;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); const a = Math.atan2(y, x), d = Math.hypot(x, y); const t = (d - r0) / (r1 - r0); const hgt = Math.sin(Math.PI * Math.min(1, t * 1.2)) * (hMin + (hMax - hMin) * (0.5 + 0.5 * rr(a))); p.setZ(i, hgt); }
+    g.computeVertexNormals(); const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: false })); m.rotation.x = -Math.PI / 2; m.position.set(40, -0.3, 0); m.receiveShadow = false; ctx.scene.add(m);
+  };
+  ring(950, 1500, 25, 90, 160, 0x6f8f55, 1.3);   // green hills
+  ring(1700, 2300, 120, 320, 120, 0x7f93a6, 4.1); // distant blue-grey mountains
+}

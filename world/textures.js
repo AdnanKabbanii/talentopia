@@ -166,3 +166,42 @@ export function boardTex(lines, { bg = '#0c1426', fg = '#f3c679', title = '' } =
   g.font = '600 22px ui-monospace, Menlo, monospace'; g.fillStyle = fg; lines.forEach((l, i) => g.fillText(l, 20, 76 + i * 34));
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+
+// Leaf-cluster atlas for card foliage (alpha). 2x2 variants in one 512 texture.
+export function leafTex(seed = 5) {
+  if (cache.leaf) return cache.leaf;
+  const S = 512, [c, g] = canvas(S, S), r = rng(seed);
+  g.clearRect(0, 0, S, S);
+  const greens = [[52, 92, 38], [70, 112, 44], [88, 128, 52], [44, 78, 34], [104, 140, 62], [60, 100, 40]];
+  for (let q = 0; q < 4; q++) {
+    const ox = (q % 2) * 256, oy = (q >> 1) * 256;
+    // twigs
+    g.strokeStyle = 'rgba(70,52,36,0.9)'; g.lineWidth = 3;
+    for (let t = 0; t < 5; t++) { g.beginPath(); g.moveTo(ox + 128, oy + 250); g.quadraticCurveTo(ox + 60 + r() * 140, oy + 140, ox + 30 + r() * 200, oy + 20 + r() * 90); g.stroke(); }
+    // leaves: dense in a rounded cluster, sparser at the edge
+    for (let i = 0; i < 260; i++) {
+      const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 112; const x = ox + 128 + Math.cos(a) * d, y = oy + 118 + Math.sin(a) * d * 0.95;
+      const [R, G, B] = greens[(r() * greens.length) | 0]; const k = 0.8 + r() * 0.35 - d / 600;
+      g.save(); g.translate(x, y); g.rotate(r() * Math.PI * 2);
+      const L = 9 + r() * 9, Wd = L * (0.42 + r() * 0.2);
+      g.fillStyle = `rgb(${R * k | 0},${G * k | 0},${B * k | 0})`; g.beginPath(); g.ellipse(0, 0, L, Wd, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = `rgba(${R * 0.6 | 0},${G * 0.7 | 0},${B * 0.6 | 0},0.6)`; g.lineWidth = 1; g.beginPath(); g.moveTo(-L, 0); g.lineTo(L, 0); g.stroke();
+      g.restore();
+    }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso; t.generateMipmaps = true;
+  return (cache.leaf = t);
+}
+
+// Large-scale meadow colour variation (no visible tiling from the air)
+export function meadowTex() {
+  if (cache.meadow) return cache.meadow;
+  const S = 1024, [c, g] = canvas(S, S), r = rng(77);
+  g.fillStyle = '#7f9c5c'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 900; i++) { const x = r() * S, y = r() * S, rad = 20 + r() * 120; const k = r();
+    const grd = g.createRadialGradient(x, y, 0, x, y, rad); const col = k < 0.5 ? [96, 124, 66] : k < 0.8 ? [140, 158, 92] : [120, 118, 80];
+    grd.addColorStop(0, `rgba(${col},0.35)`); grd.addColorStop(1, `rgba(${col},0)`); g.fillStyle = grd;
+    for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) { g.beginPath(); g.arc(x + ox, y + oy, rad, 0, 7); g.fill(); } }
+  for (let i = 0; i < 40000; i++) { g.fillStyle = `rgba(${r() < 0.5 ? '60,80,40' : '170,180,120'},${r() * 0.12})`; g.fillRect(r() * S, r() * S, 2, 2); }
+  return (cache.meadow = tex(c, 600, 600));
+}

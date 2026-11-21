@@ -15,6 +15,14 @@ An original browser-based 3D city experience, intended as the first working proo
 - Career Passport, discovery badges and XP (stored locally on the browser device).
 - Desktop and mobile responsive interface, including a guest welcome flow.
 
+## V11: more realistic exteriors
+
+- Card-foliage trees: three species (round, columnar, wide plane tree) with leaf-cluster cards, alpha-tested leaf shadows and wind sway.
+- Facade depth: protruding curtain-wall mullions and floor lines on glass buildings. Buildings get a stone plinth, a dark-glass ground-floor storefront and a transom band, plus varied rooftop plant (units, water tanks, masts). Every signed building gets a framed glass entrance and a lit canopy.
+- Streets: traffic signals at every intersection that cars obey (24 s cycle), corner bollards, bins and hydrants, and bike racks at the plaza.
+- Landscaping fills leftover open ground in each district (lawns, trees, hedges, shrubs) while keeping entrance approaches clear. The plaza uses finer warm pavers.
+- Lighting: GTAO ambient occlusion on desktop (turns itself off below ~32 fps; `?ao=0` disables it), 4096 px sun shadows over a 220 m area, and a fogged horizon of rolling hills and distant mountains on a large-scale meadow.
+
 ## V10: deeper interiors (`world/interiors.js`, `world/activities.js`)
 
 - Every featured building now has a finished room: plaster linings, skirting, timber dado or slats, a branded feature wall, pendant lights, rugs and plants. The rooms have three hands-on workstations, a careers board (five real jobs with study paths), standing professionals and seated staff, customers or passengers.

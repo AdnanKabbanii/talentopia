@@ -33,9 +33,9 @@ function named(ctx, name, district, x, z, w, d, h, featured = null) {
 function feature(ctx, spec) { ctx.featured = ctx.featured || []; ctx.featured.push(spec); return spec; }
 
 // common building recipes
-function glassTower(ctx, { x, z, w, d, h, y0 = 0, tint = [70, 110, 150], seed = 1, slab = true, mullion = '#2a3340' }) {
+function glassTower(ctx, { x, z, w, d, h, y0 = 0, tint = [70, 110, 150], seed = 1, slab = true, mullion = '#2a3340', base }) {
   const gm = glassMat({ tint, seed, mullion });
-  mass(ctx, { x, z, w, d, y0, h, mat: gm, seed });
+  mass(ctx, { x, z, w, d, y0, h, mat: gm, seed, grid: { bay: 1.6, floor: 4, m: tint[0] < 50 ? M('charcoal') : M('metalDark') }, base });
   if (slab) bands(ctx, { x, z, w, d, y0, h, every: 8, mat: M('metalLight'), depth: 0.15, th: 0.3 });
 }
 function panelBlock(ctx, { x, z, w, d, h, y0 = 0, wall = '#e9e6df', kind = 'ribbon', seed = 2, glass = [80, 110, 140] }) {
@@ -45,7 +45,7 @@ function panelBlock(ctx, { x, z, w, d, h, y0 = 0, wall = '#e9e6df', kind = 'ribb
 function featuredBuilding(ctx, { id, name, district, x, z, w, d, face, gfH = 5, upper, wallMat, floorMat, signText, signOpts = {} }) {
   const inner = shell(ctx, { x, z, w, d, face, gfH, wallMat: wallMat || M('white'), floorMat: floorMat || M('marble'), name });
   if (upper) upper(gfH);
-  faceSign(ctx, { x, z, w, d }, face, signText || name, gfH + 0.9, 1.1, { bg: '#101A32', accent: signOpts.accent || '#8056F6', ...signOpts });
+  faceSign(ctx, { x, z, w, d }, face, signText || name, gfH + 0.9, 1.1, { bg: '#101A32', accent: signOpts.accent || '#8056F6', ...signOpts, door: false });
   named(ctx, name, district, x, z, w, d, (upper ? 14 : gfH), id);
   return feature(ctx, { id, name, district, face, ...inner, w, d, x, z, gfH });
 }
@@ -354,4 +354,34 @@ function sky(ctx) {
 export function buildDistricts(ctx) {
   const builders = { med: medcity, capital, creative, forge, nexus, taste, planet, civic, market, sky };
   for (const d of DISTRICTS) { ctx._footColor = '#cfc9bd'; builders[d.id](ctx); }
+  landscape(ctx);
+}
+
+// Fill leftover open ground in each block with landscaped lawns, trees, hedges and benches,
+// keeping clear of buildings, existing furniture and the approach to every featured entrance.
+function landscape(ctx) {
+  const hosp = { x: -140, z: -95, w: 84, d: 46 }; // hospital (loaded later from GLB) + forecourt
+  const foots = [...ctx.footprints, hosp];
+  const cols = ctx.colliders.slice();
+  const ents = (ctx.featured || []).map(f => { const c = f.inside || { x: (f.x0 + f.x1) / 2, z: (f.z0 + f.z1) / 2 }, e = f.entrance; const dx = e.x - c.x, dz = e.z - c.z, L = Math.hypot(dx, dz) || 1; return { e, dx: dx / L, dz: dz / L }; });
+  ents.push({ e: { x: -140, z: -76 }, dx: 0, dz: 1 });
+  const nearSeg = (px, pz) => ents.some(({ e, dx, dz }) => { const t = Math.max(0, Math.min(40, (px - e.x) * dx + (pz - e.z) * dz)); return Math.hypot(px - (e.x + dx * t), pz - (e.z + dz * t)) < 5; });
+  const blocked = (px, pz, r) => foots.some(f => Math.abs(px - f.x) < f.w / 2 + r && Math.abs(pz - f.z) < f.d / 2 + r) || cols.some(b => px > b.x0 - r && px < b.x1 + r && pz > b.z0 - r && pz < b.z1 + r);
+  let k = 0;
+  for (const d of DISTRICTS) {
+    if (d.id === 'sky' || d.id === 'planet') continue;
+    const [x0, x1, z0, z1] = d.bounds;
+    for (let x = x0 + 6; x <= x1 - 6; x += 9) for (let z = z0 + 6; z <= z1 - 6; z += 9) {
+      if (blocked(x, z, 5.5) || nearSeg(x, z)) continue;
+      k++;
+      ctx.box(x, 0.15, z, 8, 0.12, 8, M('grass'), { shadow: false }); ctx.floor(x - 4, x + 4, z - 4, z + 4, 0.27);
+      ctx.box(x, 0.15, z - 4.05, 8.2, 0.22, 0.12, M('concrete'), { shadow: false }); ctx.box(x, 0.15, z + 4.05, 8.2, 0.22, 0.12, M('concrete'), { shadow: false });
+      ctx.box(x - 4.05, 0.15, z, 0.12, 0.22, 8.2, M('concrete'), { shadow: false }); ctx.box(x + 4.05, 0.15, z, 0.12, 0.22, 8.2, M('concrete'), { shadow: false });
+      const v = (k * 7 + (x | 0)) % 5;
+      if (v < 3) treeAt(ctx, x + (v - 1) * 1.5, z + ((k % 3) - 1) * 1.5, 0.85 + (k % 4) * 0.1, 0.27);
+      if (v === 3) { for (let i = -1; i <= 1; i++) ctx.inst.add('shrub', () => { const g = new THREE.IcosahedronGeometry(0.55, 1); g.scale(1, 0.8, 1); return [[g, M('leaf2')]]; }, mat4(x + i * 2.2, 0.75, z)); }
+      if (v === 4) { ctx.box(x, 0.27, z, 6.5, 0.55, 1.1, M('leaf'), {}); }  // clipped hedge
+    }
+  }
+  return k;
 }
