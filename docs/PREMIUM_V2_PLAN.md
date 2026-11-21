@@ -85,3 +85,29 @@ Rules: no edits to `backup-2026-11-21-pre-premium`, nothing merged or pushed to 
   - Afro and some hair cards show a visible hairline edge.
   - The NPCs still use the older fixed models.
   - The avatar download is about 7.5 MB (base 5.8 MB).
+
+## Milestone C, delivered (feature/premium-city-v2)
+- **Staff with real faces**: all 23 named professionals now use the V2 morph-target avatar, each with their own look (`CAST` in `world/conversations.js`): skin, hair, beard, glasses, outfit and tint, height.
+  - Every avatar is a skeleton clone of one shared download (`world/avatar.js`), so 23 staff add no extra downloads.
+  - Hidden-skin index buffers are cached per outfit+shoes combination.
+  - Extras (diners, passengers, the public) keep the lighter fixed models.
+- **Life when you approach**: staff turn their head to follow you within about 4.5 m. They also wave and smile the first time you come close.
+- **Conversations** (`world/conversations.js`): press E or click a staff member.
+  - **Framing**: the camera moves to an over-the-shoulder shot of the speaker, kept in front of walls. It widens when choices are shown or the speaker points, and uses a tighter lens across desks. You turn to face the speaker and both characters keep eye contact through head look-at.
+  - **Branching script**: each person has a greeting plus 3–4 topics (a normal day, skills, how they got into it, and a role-specific extra). Choices that have been asked disappear.
+  - **Workstation hand-off**: "Show me your workstation" makes them point at their nearest task, and "Try it now" walks you there and starts it. Maya's script replaces the old reception dialog and still completes the guided-route step.
+  - **Gestures**: explain (talking-hands clip), present (open arms, new clip), nod, head shake (new clip), and procedural wave and point.
+  - **Expressions**: smile, thinking and surprised, built from the smile and brow morphs.
+- **Voice and lip sync** (`world/speech.js`):
+  - **Voices**: lines are spoken through the browser's built-in speech voices, with a gendered voice and pitch per character. A Voice on/off toggle is remembered between visits.
+  - **Lip sync**: mouth shapes (jaw open, O, E, closed for m/b/p) are derived from the letters of each word on a syllable-timed schedule. When the browser reports word boundaries during speech, the schedule re-anchors to the real audio.
+  - **Subtitles**: words highlight as they're spoken. Space or a click skips the line.
+- **AI dialogue (optional)**: `api/npc.js` is a Vercel function that answers free questions in character via the Claude API (`claude-opus-5-5`, low effort, server-side refusal fallback).
+  - It is off unless `ANTHROPIC_API_KEY` is set on the Vercel project. With no key, the "Ask your own question" choice stays hidden and only scripted dialogue is used.
+  - The prompt keeps the character on careers and forbids asking about or judging the student's personal details.
+- **Robustness**: if an automatic walk to a workstation gets stuck within 3 m of it, the action now runs anyway.
+- **Known limits**:
+  - **Voice quality**: it depends on the device's installed voices and varies by browser.
+  - **Lip sync**: estimated from text, not from audio analysis.
+  - **Faces**: there is no per-viseme tongue or teeth animation beyond the jaw, beards render as fine dots up close, and some hairlines are hard-edged.
+  - **Testing**: phone performance with many avatar staff hasn't been measured on a real device. In the desktop preview pane, the hospital renders about 330 draw calls and 835k triangles with 3 staff visible.

@@ -44,6 +44,17 @@ function deriveGait(src, name, k, newDur) {
 // gait table: [name, source clip, stride scale, cycle seconds]
 const GAITS = [['Stroll', 'Walk', 1.0, null], ['WalkG', 'Walk', 1.32, 1.06], ['JogG', 'Jog', 0.42, 0.76], ['RunG', 'Sprint', 0.68, 0.64]];
 const v3 = new THREE.Vector3(), v4 = new THREE.Vector3();
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3(), _v6 = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _axis = new THREE.Vector3();
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion(), _id = new THREE.Quaternion();
+// apply a world-space rotation delta to a bone: local' = parentWorld^-1 * delta * parentWorld * local
+function worldRotate(b, delta) {
+  b.parent.getWorldQuaternion(_q3); _q4.copy(_q3).invert().multiply(delta).multiply(_q3); b.quaternion.premultiply(_q4); b.updateMatrixWorld(true);
+}
+// turn a bone so the direction towards its child points along dir (world), blended by w
+function aim(b, child, dir, w) {
+  const a = b.getWorldPosition(_v5), c = child.getWorldPosition(_v2).sub(a).normalize();
+  _q1.setFromUnitVectors(c, dir); _q2.copy(_id).slerp(_q1, w); worldRotate(b, _q2);
+}
 
 export class Character {
   constructor(gltf, { role = 'npc', animations = null, model = null } = {}) {
@@ -53,7 +64,8 @@ export class Character {
     // auto-detect facing from the bind pose (toe ahead of ankle) and turn the model to face +Z
     this.model.updateMatrixWorld(true);
     const bone = n => { let b = null; this.model.traverse(o => { if (o.isBone && o.name.toLowerCase() === n) b = o; }); return b; };
-    this.bones = { footL: bone('foot_l'), footR: bone('foot_r'), ballL: bone('ball_l'), ballR: bone('ball_r'), head: bone('head'), neck: bone('neck_01') };
+    this.bones = { footL: bone('foot_l'), footR: bone('foot_r'), ballL: bone('ball_l'), ballR: bone('ball_r'), head: bone('head'), neck: bone('neck_01'), spine: bone('spine_03'),
+      upR: bone('upperarm_r'), loR: bone('lowerarm_r'), handR: bone('hand_r'), upL: bone('upperarm_l'), loL: bone('lowerarm_l'), handL: bone('hand_l') };
     const foot = this.bones.footL, ball = this.bones.ballL, thigh = bone('thigh_l'), calf = bone('calf_l');
     if (foot && ball) { foot.getWorldPosition(v3); ball.getWorldPosition(v4); const yaw = Math.atan2(v4.x - v3.x, v4.z - v3.z); this.model.rotation.y = -yaw; }
     this.leg = (thigh && calf && foot) ? thigh.getWorldPosition(v3).distanceTo(calf.getWorldPosition(v4)) + calf.getWorldPosition(v3).distanceTo(foot.getWorldPosition(v4)) : 0.85;
@@ -77,6 +89,10 @@ export class Character {
     this.speed = 0; this.blend = 0.2;
     if (this.acts.Idle) { this.acts.Idle.time = Math.random() * this.dur.Idle; }
     this.morphMeshes = []; this.blinkT = 2 + Math.random() * 3;
+    // procedural layer (applied after the clips): head look-at, wave / point gestures, expressions and visemes
+    this.look = { target: null, yaw: 0, pitch: 0, w: 0 }; this.gesture = null;
+    this.expr = { smile: 0, browsUp: 0, browsDown: 0 }; this.exprCur = { smile: 0, browsUp: 0, browsDown: 0 };
+    this.vis = { jawOpen: 0, mouthO: 0, mouthE: 0 }; this.visCur = { jawOpen: 0, mouthO: 0, mouthE: 0 };
   }
   gaitSpeed(n) { const g = this.gaits.find(x => x.name === n); return g ? g.speed : 1; }
   // sample the clip on this skeleton: speed = backward speed of the lowest foot point while planted; offset = phase of left-foot contact
@@ -141,15 +157,61 @@ export class Character {
     this.mixer.update(dt);
     const targetLean = THREE.MathUtils.clamp(-turn * speed * 0.01, -0.14, 0.14);
     this.lean += (targetLean - this.lean) * Math.min(1, dt * 6); this.leanG.rotation.z = this.lean;
+    this.procedural(dt);
     this.faceLife(dt);
   }
-  // blinking (and expression hooks) for models with facial morph targets
+  // ---------------------------------------------------------------- procedural layer
+  wave(d = 1.8) { this.gesture = { name: 'wave', t: 0, d }; }
+  point(target, d = 2.2) { this.gesture = { name: 'point', t: 0, d, target: target.clone() }; }
+  lookAt(v) { this.look.target = v ? (this.look.target || new THREE.Vector3()).copy(v) : null; }
+  procedural(dt) {
+    const L = this.look, G = this.gesture, B = this.bones;
+    const wantW = L.target ? 1 : 0; L.w += (wantW - L.w) * Math.min(1, dt * 4);
+    if (L.w < 0.01 && !G) return;
+    this.root.updateMatrixWorld(true);
+    if (L.w > 0.01 && B.head && B.neck) {
+      if (L.target) {
+        const hp = B.head.getWorldPosition(_v1); const ry = this.root.rotation.y;
+        const dx = L.target.x - hp.x, dz = L.target.z - hp.z, dy = L.target.y - hp.y;
+        let yaw = Math.atan2(dx, dz) - ry; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+        const tyaw = THREE.MathUtils.clamp(yaw, -1.1, 1.1), tp = THREE.MathUtils.clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.45, 0.35);
+        L.yaw += (tyaw - L.yaw) * Math.min(1, dt * 6); L.pitch += (tp - L.pitch) * Math.min(1, dt * 6);
+      }
+      const ry = this.root.rotation.y; _axis.set(Math.cos(ry), 0, -Math.sin(ry));
+      for (const [b, k] of [[B.neck, 0.4], [B.head, 0.6]]) {
+        _q1.setFromAxisAngle(_up, L.yaw * k * L.w); _q2.setFromAxisAngle(_axis, -L.pitch * k * L.w); _q1.multiply(_q2);
+        worldRotate(b, _q1);
+      }
+    }
+    if (G) {
+      G.t += dt; const env = Math.max(0, Math.min(1, G.t / 0.35, (G.d - G.t) / 0.45));
+      if (G.t >= G.d) this.gesture = null;
+      else if (B.upR && B.loR && B.handR && B.spine) {
+        const sh = B.upR.getWorldPosition(_v1), sp = B.spine.getWorldPosition(_v2);
+        const out = _v3.set(sh.x - sp.x, 0, sh.z - sp.z).normalize();
+        if (G.name === 'wave') {
+          const ry = this.root.rotation.y; const fwd = _v6.set(Math.sin(ry), 0, Math.cos(ry));
+          const upDir = _v4.copy(out).addScaledVector(_up, 0.45).addScaledVector(fwd, 0.3).normalize();
+          aim(B.upR, B.loR, upDir, env);
+          const sw = Math.sin(G.t * 9) * 0.38; const fa = _v4.copy(_up).addScaledVector(out, 0.1 + sw).addScaledVector(fwd, 0.15).normalize();
+          aim(B.loR, B.handR, fa, env);
+        } else {
+          const dir = _v4.copy(G.target).sub(sh).normalize(); dir.y = Math.min(dir.y, 0.1); dir.normalize();
+          aim(B.upR, B.loR, dir, env * 0.9); aim(B.loR, B.handR, dir, env * 0.9);
+        }
+      }
+    }
+  }
+  // blinking, expressions and visemes for models with facial morph targets
   faceLife(dt) {
     if (!this.morphMeshes.length) return;
     this.blinkT -= dt; let b = 0;
     if (this.blinkT < 0.16) b = Math.sin(Math.max(0, this.blinkT) / 0.16 * Math.PI);
     if (this.blinkT <= 0) this.blinkT = 2.2 + Math.random() * 3.5;
     this.setMorph('blinkL', b); this.setMorph('blinkR', b);
+    const ke = Math.min(1, dt * 5), kv = Math.min(1, dt * 22);
+    for (const k in this.expr) { this.exprCur[k] += (this.expr[k] - this.exprCur[k]) * ke; this.setMorph(k, this.exprCur[k]); }
+    for (const k in this.vis) { this.visCur[k] += (this.vis[k] - this.visCur[k]) * kv; this.setMorph(k, this.visCur[k]); }
   }
   setMorph(name, v) { for (const m of this.morphMeshes) { const i = m.morphTargetDictionary[name]; if (i !== undefined) m.morphTargetInfluences[i] = v; } }
   get locked() { return this.oneShot && this.oneShot.lock; }

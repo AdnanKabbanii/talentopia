@@ -48,6 +48,17 @@ button{font:inherit;cursor:pointer;border:0;border-radius:12px}
 #dialog .opts button:hover{border-color:var(--violet)}
 #dialog .opts button.primary{background:var(--violet);color:#fff;border-color:var(--violet)}#dialog .opts .row button{text-align:center}
 #dialog .opts button.good{border-color:var(--mint);background:#effaf5}#dialog .opts button.bad{border-color:#f0a3a3;background:#fff4f4}
+#talk{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);width:min(640px,94vw);padding:14px 18px 14px;z-index:8;display:none}
+#talk .tk-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#talk .tk-head b{font-size:15px;color:var(--ink);margin-right:8px}#talk .tk-head span{font-size:11px;font-weight:800;letter-spacing:1px;color:#6b55c9;text-transform:uppercase}
+#talk .tk-ctl{display:flex;gap:6px}#talk .tk-ctl button{background:#fff;border:1px solid var(--line);padding:6px 10px;font-size:12px;font-weight:700;border-radius:10px}
+#talk .tk-q{margin-top:8px;font-size:13px;color:var(--muted);font-style:italic}
+#talk .tk-line{margin:8px 0 10px;font-size:17px;line-height:1.5;cursor:pointer}#talk .tk-line span{color:rgba(17,24,39,.32);transition:color .12s}#talk .tk-line span.on{color:var(--ink)}
+#talk .tk-opts{display:grid;grid-template-columns:1fr 1fr;gap:7px}#talk .tk-opts .tk-free,#talk .tk-opts .tk-note{grid-column:1/-1}#talk .tk-opts button{text-align:left;background:#fff;border:1px solid var(--line);padding:10px 14px;font-weight:600;border-radius:12px}
+#talk .tk-opts button:hover{border-color:var(--violet)}#talk .tk-opts button.primary{background:var(--violet);color:#fff;border-color:var(--violet)}
+#talk .tk-hint,#talk .tk-note{font-size:11px;color:var(--muted);margin-top:6px}#talk .tk-free{display:flex;gap:8px}#talk .tk-free input{flex:1;padding:10px 12px;border-radius:12px;border:1px solid var(--line);font:inherit}
+body.talking #obj,body.talking #prompt,body.talking #mini,body.talking #joy,body.talking #eBtn,body.talking #runBtn{opacity:0;pointer-events:none;transition:opacity .3s}
+@media (max-width:760px){#talk .tk-opts{grid-template-columns:1fr}#talk{bottom:8px;padding:12px 14px}#talk .tk-line{font-size:15px}#talk .tk-opts button{padding:9px 12px;font-size:13px}}
 #dialog .note{font-size:12px;color:var(--muted);margin-top:10px}
 #dialog .calc{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 12px}
 #dialog .calc label{font-size:12px;font-weight:700;color:var(--muted);display:flex;flex-direction:column;gap:4px}
@@ -152,6 +163,7 @@ body.intro #top,body.intro #where,body.intro #obj,body.intro #mini,body.intro #h
 <div id="toast" class="glass"></div>
 <div id="hint">WASD / arrows walk · Shift run · drag to look · scroll zoom · E interact · click a building to walk there · M map</div>
 <div id="dialog" class="glass"></div>
+<div id="talk" class="glass" aria-live="polite"></div>
 <div id="lab" class="glass"></div>
 <div id="map"><div class="panel glass"><canvas id="mapC"></canvas><aside id="mapList"></aside></div></div>
 <div id="fade"></div>

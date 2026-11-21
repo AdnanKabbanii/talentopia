@@ -17,6 +17,8 @@ import { loadModel, Character } from './characters.js';
 import { createUI } from './ui.js';
 import { loadLandmarks, loadHospitalUpgrade } from './landmarks.js';
 import { AvatarModel, AvatarStudio } from './avatar.js';
+import { Conversations, CAST } from './conversations.js';
+import { Speech } from './speech.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -243,7 +245,8 @@ addEventListener('keydown', e => {
   if (k === 'v' && mode === 'walk') { walkMode = !walkMode; ui.toast(walkMode ? 'Walking pace' : 'Jogging pace'); }
   if (k === 'm' && mode === 'walk') ui.openMap(mapData());
   else if (k === 'm' && mode === 'map') ui.closeMap();
-  if (k === 'escape') { if (mode === 'lab') closeLab(); else ui.closeAll(); }
+  if (k === ' ' && mode === 'talk') conv.skip();
+  if (k === 'escape') { if (mode === 'lab') closeLab(); else if (mode === 'talk') conv.end(); else ui.closeAll(); }
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { P.route = []; P.routeCb = null; }
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -273,6 +276,8 @@ function updatePlayer(dt) {
   } else if (P.route.length && mode === 'walk') {
     // stuck detection: if we barely moved for a while, sidestep around the obstacle
     P.stuckT = (P.stuckT || 0) + dt; if (P.stuckT > 0.8) { const moved = P.stuckFrom ? Math.hypot(P.pos.x - P.stuckFrom.x, P.pos.z - P.stuckFrom.z) : 9; P.stuckFrom = P.pos.clone(); P.stuckT = 0;
+      const fin = P.route[P.route.length - 1];
+      if (moved < 0.35 && P.routeCb && Math.hypot(fin.x - P.pos.x, fin.z - P.pos.z) < 3.2) { P.route = []; const cb = P.routeCb; P.routeCb = null; cb(); return; }
       if (moved < 0.35 && !P.route[0].detour) { const t = P.route[0]; const dx = t.x - P.pos.x, dz = t.z - P.pos.z, d = Math.hypot(dx, dz) || 1; const side = (P.sideSign = -(P.sideSign || 1));
         P.route.unshift({ x: P.pos.x + (-dz / d) * 1.4 * side + dx / d * 0.8, z: P.pos.z + (dx / d) * 1.4 * side + dz / d * 0.8, detour: true }); } }
     const t = P.route[0]; const dx = t.x - P.pos.x, dz = t.z - P.pos.z, d = Math.hypot(dx, dz);
@@ -288,6 +293,7 @@ function updatePlayer(dt) {
     // slow down while turning sharply (no moonwalking / sideways sliding)
     const align = Math.max(0, Math.cos(diff)); desSpeed *= 0.25 + 0.75 * align * align;
   }
+  if (mode === 'talk' && conv.active) { const n = conv.active.n; const diff = angDiff(P.yaw, Math.atan2(n.x - P.pos.x, n.z - P.pos.z)); turn = THREE.MathUtils.clamp(diff * 6, -4, 4); P.yaw += turn * dt; }
   // accelerate / decelerate smoothly (frame-rate independent)
   const accel = desSpeed > P.speed ? (P.speed < 1.5 ? 3.6 : P.speed < 3.4 ? 4.2 : 2.6) : 6.0;
   P.speed += (desSpeed - P.speed) * (1 - Math.exp(-accel * dt));
@@ -348,6 +354,7 @@ function updateCamera(dt) {
   if (mode === 'lab' && heartPivot) { labCamera(dt); return; }
   if (!player) { flyover(dt); return; }
   if (intro) { introCam(dt); return; }
+  if (mode === 'talk' && conv.active && conv.active.n.c) { talkCamera(dt); return; }
   const inside = !!P.inside;
   const dist = inside ? Math.min(camDist, 4.2) : camDist, pitch = inside ? Math.max(camPitch, 0.2) : camPitch;
   const want = tmp.set(P.pos.x, P.pos.y + 1.55, P.pos.z);
@@ -363,6 +370,25 @@ function updateCamera(dt) {
   }
   camera.position.copy(camTarget).addScaledVector(dir, best);
   camera.lookAt(camTarget);
+}
+// conversation framing: over the player's shoulder onto the speaker (kept in front of walls)
+const headPos = (c, out) => { const h = c.bones.head; if (h) { h.getWorldPosition(out); out.y += 0.05; } else out.copy(c.root.position).setY(c.root.position.y + 1.6); return out; };
+const _ph = new THREE.Vector3(), _nh = new THREE.Vector3();
+function talkCamera(dt) {
+  const n = conv.active.n; headPos(player, _ph); headPos(n.c, _nh);
+  const s = conv.camera(_ph, _nh); if (!s) return;
+  const dir = s.pos.clone().sub(s.look); const len = dir.length(); dir.normalize(); camRay.set(s.look, dir); let best = len;
+  for (const b of colGrid.near(s.pos.x, s.pos.z, len + 2)) {
+    if (b.y1 < 1.2 || (b.door && b.open)) continue; box.min.set(b.x0, b.y0, b.z0); box.max.set(b.x1, b.y1, b.z1);
+    if (box.containsPoint(s.look)) continue;
+    if (camRay.intersectBox(box, hitV)) { const d = hitV.distanceTo(s.look); if (d < best) best = Math.max(0.5, d - 0.15); }
+  }
+  const want = s.look.clone().addScaledVector(dir, best); const k = 1 - Math.exp(-dt * (conv.shot.ready ? 5 : 3.5));
+  if (!conv.shot.ready) { conv.shot.pos.copy(camera.position); conv.shot.look.copy(camTarget); conv.shot.ready = true; }
+  conv.shot.pos.lerp(want, k); conv.shot.look.lerp(s.look, k);
+  camera.position.copy(conv.shot.pos); camera.lookAt(conv.shot.look);
+  if (Math.abs(camera.fov - s.fov) > 0.05) { camera.fov += (s.fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+  camTarget.copy(conv.shot.look); camYaw = Math.atan2(camera.position.x - P.pos.x, camera.position.z - P.pos.z);
 }
 // mouse / touch look
 let drag = null;
@@ -410,7 +436,9 @@ function click(e) {
   if (mode === 'lab') { const m = pickHeart(); if (m) selectPart(m); return; }
   if (mode !== 'walk' || !player) return;
   // people first
-  for (const n of PRO_CHARS) { if (n.c && ray.intersectObject(n.c.root, true)[0]) { const st = n.station ? STATIONS.find(s => s.id === n.station) : null; walkTo(st ? st : { x: n.x + Math.sin(n.ry) * 1.6, z: n.z + Math.cos(n.ry) * 1.6 }, () => st ? runAction(st) : talk(n)); return; } }
+  for (const n of PRO_CHARS) { if (n.c && n.c.root.visible && ray.intersectObject(n.c.root, true)[0]) { const talkable = CAST[n.role] || n.talk; const st = n.station ? STATIONS.find(s => s.id === n.station) : null;
+    const near = Math.hypot(n.x - P.pos.x, n.z - P.pos.z) < 2.8;
+    if (talkable && near) talk(n); else walkTo(st ? st : { x: n.x + Math.sin(n.ry) * 1.6, z: n.z + Math.cos(n.ry) * 1.6 }, () => talkable ? talk(n) : st && runAction(st)); return; } }
   const b = pickBuilding();
   if (b) { if (b.featured) { const f = FEATURED.find(x => x.id === b.featured); if (f) goToBuilding(f); } else ui.toast(`${b.building} · not open to visitors yet. Featured buildings with real interiors are marked on the map.`); return; }
   // click on the ground: walk there
@@ -467,7 +495,7 @@ function interactables() {
   for (const f of FEATURED) if (!P.inside || P.inside.id !== f.id) out.push({ kind: 'enter', x: f.entrance.x, z: f.entrance.z, r: 4.5, label: `${f.name} · Press E to enter`, f });
   if (P.inside) out.push({ kind: 'exit', x: P.inside.entrance.x, z: P.inside.entrance.z, r: 0, label: '', f: P.inside });
   for (const s of STATIONS) out.push({ kind: 'station', x: s.x, z: s.z, r: s.radius || 2.2, label: s.label, s });
-  for (const n of PRO_CHARS) if (n.talk && n.c) out.push({ kind: 'talk', x: n.x, z: n.z, r: 2.6, label: `${n.role} · Press E to talk`, n });
+  for (const n of PRO_CHARS) if ((CAST[n.role] || n.talk) && n.c) { const nm = n.role.split(' · ').pop(); out.push({ kind: 'talk', x: n.x, z: n.z, r: n.station ? 2.0 : 2.7, label: `${n.role} · Press E to talk to ${nm}`, n }); }
   return out;
 }
 function updatePrompt() {
@@ -484,15 +512,24 @@ function interact() {
   else if (it.kind === 'talk') talk(it.n);
 }
 function faceTowards(x, z) { P.yaw = Math.atan2(x - P.pos.x, z - P.pos.z); }
-function talk(n) {
-  faceTowards(n.x, n.z); if (n.c) n.c.play('Talk', { lock: false });
-  ui.dialog(n.role, n.talk || 'Hello!', [{ label: 'Thanks!', fn: () => ui.closeDialog() }]);
-}
+function talk(n) { P.route = []; P.routeCb = null; conv.start(n); }
+// ------------------------------------------------------------------ conversations (scripted, voiced, lip-synced; optional AI)
+const speech = new Speech();
+const conv = new Conversations({
+  speech, aiEndpoint: 'api/npc',
+  setMode: m => { mode = m; if (m === 'walk' && player) player.lookAt(null); },
+  playerHead: () => player ? headPos(player, new THREE.Vector3()) : new THREE.Vector3(),
+  stationsNear: n => STATIONS.filter(s => s.building === n.building && s.action !== 'hosp:reception' && Math.hypot(s.x - n.x, s.z - n.z) < 6.5).sort((a, b) => Math.hypot(a.x - n.x, a.z - n.z) - Math.hypot(b.x - n.x, b.z - n.z)),
+  runStation: s => walkTo(s, () => runAction(s)),
+  labTarget: () => { const s = STATIONS.find(x => x.id === 'heartlab'); return s ? new THREE.Vector3(s.x, 1.2, s.z) : null; },
+  goLab: () => { const st = STATIONS.find(s => s.id === 'heartlab'); walkTo(st, () => runAction(st)); },
+  onStart: n => { if (n.role === 'Receptionist · Maya') event('talk:reception'); if (player && n.c) player.lookAt(headPos(n.c, new THREE.Vector3())); if (P.seated) { P.seated = false; player.sitDown(false); } },
+});
 function runAction(s) {
   faceTowards(s.x, s.z);
   const pro = PRO_CHARS.find(n => n.building === s.building && Math.hypot(n.x - s.x, n.z - s.z) < 5);
   if (pro && pro.c) pro.c.play(pro.c.acts.Nod ? 'Nod' : 'Talk', { lock: false });
-  if (s.action === 'hosp:reception') return reception();
+  if (s.action === 'hosp:reception') { const maya = PRO_CHARS.find(n => n.role === 'Receptionist · Maya'); return maya && maya.c ? talk(maya) : reception(); }
   if (s.action === 'hosp:lab') { player.play('Interact', { lock: true, then: () => openLab() }); return; }
   if (s.action.startsWith('mission:')) { const id = s.action.slice(8); player.play('Interact', { lock: true }); ui.mission(id, (res) => { if (res && res.done) event('mission:' + id); }); }
   if (s.action.startsWith('career:')) { ui.careers(s.action.slice(7)); }
@@ -533,10 +570,17 @@ function updateBeacon(t) { const o = OBJ[objIdx]; const p = o && o.target && o.t
 // ------------------------------------------------------------------ professional NPCs + pedestrians
 const PRO_CHARS = []; const peds = [];
 async function spawnPeople() {
+  // named staff get the V2 morph-target avatar (faces, blinking, lip sync); extras keep the lighter fixed models
+  const queue = [];
   for (const p of PROS) { const n = { ...p }; PRO_CHARS.push(n);
+    const cast = CAST[p.role]; if (cast) { queue.push(n); continue; }
     spawnChar(p.model).then(c => { n.c = c; c.root.position.set(p.x, p.y ?? 0.15, p.z); c.root.rotation.y = p.ry; n.baseRy = p.ry;
       c.idleClip = p.idle || ['Idle', 'FoldArms', 'Idle'][PRO_CHARS.indexOf(n) % 3]; if (!c.acts[c.idleClip]) c.idleClip = 'Idle';
       if (p.sit) { c.sitDown(true); c.sit = 1; c.sitClip = Math.random() < 0.5 ? 'SitTalk' : 'SitIdle'; } }).catch(() => {}); }
+  (async () => { // one at a time, nearest first, so loading never stalls a frame for long
+    const pp = P.pos; queue.sort((a, b) => Math.hypot(a.x - pp.x, a.z - pp.z) - Math.hypot(b.x - pp.x, b.z - pp.z));
+    for (const n of queue) { try { const c = await spawnAvatarNpc(CAST[n.role].look); placeNpc(n, c); } catch (e) { console.warn('npc', n.role, e); spawnChar(n.model).then(c => placeNpc(n, c)).catch(() => {}); } }
+  })();
   // pedestrians on sidewalk loops around busy blocks
   const loops = [[0, 0, 2], [-130, -130, 2], [0, -130, 2], [130, -130, 1], [-130, 0, 1], [130, 0, 1], [0, 130, 1], [-130, 130, 1], [130, 130, 1]];
   const models = ['visitor_m', 'visitor_f', 'avatar_m1', 'avatar_f2', 'doctor', 'avatar_m2', 'receptionist', 'avatar_f1'].filter(m => m !== chosen);
@@ -550,6 +594,18 @@ async function spawnPeople() {
     }
   }
 }
+function placeNpc(n, c) {
+  n.c = c; c.root.position.set(n.x, n.y ?? 0.15, n.z); c.root.rotation.y = n.ry; n.baseRy = n.ry;
+  c.idleClip = n.idle || ['Idle', 'FoldArms', 'Idle'][PRO_CHARS.indexOf(n) % 3]; if (!c.acts[c.idleClip]) c.idleClip = 'Idle';
+  if (n.sit) { c.sitDown(true); c.sit = 1; c.sitClip = 'SitIdle'; }
+}
+async function spawnAvatarNpc(look) {
+  const am = new AvatarModel(); await am.init(look);
+  const c = new Character(am.gltf, { model: am.root, animations: am.animations }); c.morphMeshes = am.meshes; c.avatar = am; c.isAvatar = true;
+  am.root.updateMatrixWorld(true); let hip = 0.95; const pv = am.bones.pelvis; if (pv) hip = pv.getWorldPosition(new THREE.Vector3()).y;
+  const s = 0.93 / Math.max(0.3, hip) * (look.height || 1); c.leanG.scale.setScalar(s); c.leg *= s; for (const g of c.gaits) g.speed *= s;
+  scene.add(c.root); return c;
+}
 function roundLoop(pts, r) { // round the corners of a rectangle loop
   const out = []; const n = pts.length;
   for (let i = 0; i < n; i++) { const p = pts[i], a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
@@ -560,8 +616,15 @@ function roundLoop(pts, r) { // round the corners of a rectangle loop
 }
 function updatePeople(dt) {
   const pp = player ? player.root.position : null;
-  for (const n of PRO_CHARS) { if (!n.c) continue; const near = pp && !n.sit && Math.hypot(pp.x - n.x, pp.z - n.z) < 6;
-    const vis = !pp || Math.hypot(pp.x - n.x, pp.z - n.z) < (Q.phone ? 45 : 90); n.c.root.visible = vis; if (!vis) continue;
+  for (const n of PRO_CHARS) { if (!n.c) continue; const dd = pp ? Math.hypot(pp.x - n.x, pp.z - n.z) : 0; const near = pp && !n.sit && dd < 6;
+    // staff are indoors: draw them when you're in their building or close by (keeps the many-avatar cost bounded)
+    const sameB = !n.building || (P.inside && P.inside.id === n.building);
+    const vis = !pp || (n.c.isAvatar ? (sameB ? dd < 40 : dd < 16) : dd < (Q.phone ? 45 : 90)); n.c.root.visible = vis; if (!vis) continue;
+    // reactions: look at you when you come close, a wave the first time you approach
+    if (n.c.isAvatar && pp && !(conv.active && conv.active.n === n)) {
+      if (dd < 4.5 && sameB) { n.c.lookAt(headPos(player, _ph)); if (!n.greeted && dd < 3.8 && !n.sit) { n.greeted = true; n.c.wave(1.6); n.c.expr.smile = 0.6; setTimeout(() => { if (!(conv.active && conv.active.n === n)) n.c.expr.smile = 0.15; }, 2200); } }
+      else if (n.c.look.target) n.c.lookAt(null);
+    }
     const want = near ? Math.atan2(pp.x - n.x, pp.z - n.z) : n.baseRy; const d = angDiff(n.c.root.rotation.y, want);
     const tr = THREE.MathUtils.clamp(d * 4, -2.5, 2.5); n.c.root.rotation.y += tr * dt; n.c.update(dt, 0, Math.abs(d) > 0.3 ? tr : 0); }
   for (const p of peds) {
@@ -711,7 +774,7 @@ const clock = new THREE.Clock(); let elapsed = 0, lastWhere = '', frames = 0, fp
 function step(dtOverride) {
   const dt = dtOverride || Math.min(clock.getDelta(), 1 / 20); elapsed += dt;
   if (studio.active) { studio.render(dt); return; }
-  updatePlayer(dt); updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
+  updatePlayer(dt); conv.update(dt); updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
   WIND.value = elapsed;
   for (const f of ctx.animated) f(elapsed, dt);
   updatePrompt(); updateBeacon(elapsed);
@@ -752,4 +815,4 @@ function frame() { perfTick(); step(); requestAnimationFrame(frame); }
 frame();
 window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
-  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };
+  goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };

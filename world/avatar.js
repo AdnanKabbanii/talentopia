@@ -2,10 +2,21 @@
 // one skeleton, material variations (skin, eyes, hair, outfit tint), procedural eyewear, and the Avatar Studio UI.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 
 const loader = new GLTFLoader(), texLoader = new THREE.TextureLoader();
 const load = url => new Promise((res, rej) => loader.load(url, res, undefined, rej));
 const $ = id => document.getElementById(id);
+// Assets are downloaded once and shared: every AvatarModel (the player and each staff member) is a skeleton clone of the same base,
+// with its own materials. Body index buffers (skin hidden under clothes) are cached per outfit+shoes combination.
+const shared = { p: null, parts: {}, gray: new WeakMap(), skins: {}, iris: {}, strands: {}, geo: {} };
+function assets() {
+  return shared.p || (shared.p = Promise.all([fetch('assets/avatar/avatar_catalog.json').then(r => r.json()), load('assets/avatar/avatar_base.glb'), load('assets/avatar/avatar_anims.glb')])
+    .then(([cat, base, anims]) => ({ cat, base, anims })));
+}
+const cloneMat = m => Array.isArray(m) ? m.map(x => x.clone()) : m.clone();
+function grayCached(tex) { let t = shared.gray.get(tex); if (!t) { t = grayMap(tex); shared.gray.set(tex, t); } return t; }
+function skinTex(id) { return shared.skins[id] || (shared.skins[id] = new Promise(res => texLoader.load(`assets/avatar/skins/${id}.jpg`, t => { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }, undefined, () => res(null)))); }
 
 export const DEFAULT = { pres: -0.4, build: 0, muscle: 0.25, height: 1.0, jawWide: 0, chinStrong: 0, nose: 0, cheekbones: 0.25, eyesBig: 0, eyesUp: 0, lipsFull: 0, head: 0,
   skin: 'young_caucasian_female', tone: 0, eyes: '#5b3a22', hair: 'bob01', hairColor: '#2a1d16', brows: 'eyebrow001', beard: 'none',
@@ -53,13 +64,13 @@ function strandsTex(dense) { // fine hair strands with soft alpha (rendered with
 export class AvatarModel {
   constructor() { this.cfg = { ...DEFAULT }; this.partMeshes = {}; this.loading = {}; this.ready = false; }
   async init(saved) {
-    const [cat, base, anims] = await Promise.all([fetch('assets/avatar/avatar_catalog.json').then(r => r.json()), load('assets/avatar/avatar_base.glb'), load('assets/avatar/avatar_anims.glb')]);
-    this.catalog = cat; this.gltf = base; this.animations = anims.animations; this.root = base.scene;
+    const { cat, base, anims } = await assets();
+    this.catalog = cat; this.gltf = base; this.animations = anims.animations; this.root = skClone(base.scene);
     this.meshes = []; this.byName = {};
-    this.root.traverse(o => { if (o.isMesh) { prepMaterial(o); this.meshes.push(o); this.byName[o.name] = o; if (o.geometry.attributes._hide) this.body = o; } });
+    this.root.traverse(o => { if (o.isMesh) { o.material = cloneMat(o.material); prepMaterial(o); this.meshes.push(o); this.byName[o.name] = o; if (o.geometry.attributes._hide) this.body = o; } });
     if (!this.body) this.body = this.meshes.find(o => !o.name.includes('__')) || this.meshes[0];
     this.bones = {}; for (const b of this.body.skeleton.bones) this.bones[b.name] = b;
-    this.idx0 = this.body.geometry.index.array.slice(); this.hideAttr = this.body.geometry.attributes._hide;
+    this.srcGeo = this.body.geometry; this.idx0 = this.srcGeo.index.array; this.hideAttr = this.srcGeo.attributes._hide;
     this.root.updateMatrixWorld(true);
     // eye centre in head-bone space (for eyewear)
     const eyes = this.meshes.find(m => /^eyes__/.test(m.name));
@@ -81,13 +92,15 @@ export class AvatarModel {
     const key = kind + ':' + id; if (this.partMeshes[key]) return this.partMeshes[key];
     if (this.loading[key]) return this.loading[key];
     const info = (this.catalog.parts[kind] || []).find(p => p.id === id); if (!info) return [];
-    return (this.loading[key] = load('assets/avatar/' + info.file).then(g => {
-      const list = []; g.scene.traverse(o => { if (o.isSkinnedMesh) list.push(o); });
-      for (const s of list) {
-        const bones = s.skeleton.bones.map(b => this.bones[b.name] || b);
-        s.bind(new THREE.Skeleton(bones, s.skeleton.boneInverses), s.bindMatrix);
-        s.name = kind + '__' + id; prepMaterial(s); this.body.parent.add(s);
-        if (kind === 'hair') for (const m of [].concat(s.material)) if (m.map) m.map = grayMap(m.map);
+    const src = shared.parts[info.file] || (shared.parts[info.file] = load('assets/avatar/' + info.file));
+    return (this.loading[key] = src.then(g => {
+      const srcs = []; g.scene.traverse(o => { if (o.isSkinnedMesh) srcs.push(o); }); const list = [];
+      for (const s0 of srcs) {
+        const s = s0.clone(); s.material = cloneMat(s0.material);
+        const bones = s0.skeleton.bones.map(b => this.bones[b.name] || b);
+        s.bind(new THREE.Skeleton(bones, s0.skeleton.boneInverses), s0.bindMatrix);
+        s.name = kind + '__' + id; prepMaterial(s); this.body.parent.add(s); list.push(s);
+        if (kind === 'hair') for (const m of [].concat(s.material)) if (m.map) m.map = grayCached(m.map);
       }
       this.partMeshes[key] = list; return list;
     }));
@@ -105,15 +118,21 @@ export class AvatarModel {
   }
   applyHide() { // hide body triangles fully covered by the chosen outfit + shoes
     const bits = this.catalog.hideBits; const mask = ((bits[this.cfg.outfit] ?? -1) >= 0 ? 1 << bits[this.cfg.outfit] : 0) | ((bits[this.cfg.shoes] ?? -1) >= 0 ? 1 << bits[this.cfg.shoes] : 0);
-    if (!this.hideAttr || !mask) { this.body.geometry.setIndex(new THREE.BufferAttribute(this.idx0, 1)); return; }
-    const h = this.hideAttr.array, src = this.idx0, out = [];
-    const hid = (v) => (Math.round(h[v]) & mask) !== 0;
-    for (let i = 0; i < src.length; i += 3) if (!(hid(src[i]) && hid(src[i + 1]) && hid(src[i + 2]))) out.push(src[i], src[i + 1], src[i + 2]);
-    this.body.geometry.setIndex(out);
+    if (!this.hideAttr || !mask) { this.body.geometry = this.srcGeo; return; }
+    let g = shared.geo[mask];
+    if (!g) {
+      const h = this.hideAttr.array, src = this.idx0, out = [];
+      const hid = (v) => (Math.round(h[v]) & mask) !== 0;
+      for (let i = 0; i < src.length; i += 3) if (!(hid(src[i]) && hid(src[i + 1]) && hid(src[i + 2]))) out.push(src[i], src[i + 1], src[i + 2]);
+      const s0 = this.srcGeo; g = new THREE.BufferGeometry(); for (const k in s0.attributes) g.setAttribute(k, s0.attributes[k]);
+      g.morphAttributes = s0.morphAttributes; g.morphTargetsRelative = s0.morphTargetsRelative; g.setIndex(out);
+      g.boundingBox = s0.boundingBox; g.boundingSphere = s0.boundingSphere; shared.geo[mask] = g;
+    }
+    this.body.geometry = g;
   }
   applyMaterials() {
     const c = this.cfg, bm = this.body.material;
-    if (this._skin !== c.skin) { this._skin = c.skin; texLoader.load(`assets/avatar/skins/${c.skin}.jpg`, t => { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; bm.map = t; bm.needsUpdate = true; }); }
+    if (this._skin !== c.skin) { this._skin = c.skin; const want = c.skin; skinTex(want).then(t => { if (t && this.cfg.skin === want) { bm.map = t; bm.needsUpdate = true; } }); }
     bm.color.setScalar(1 + c.tone);
     const hairC = new THREE.Color(c.hairColor);
     for (const key in this.partMeshes) {
@@ -124,9 +143,9 @@ export class AvatarModel {
       }
     }
     for (const m of this.meshes) {
-      if (/^brows__/.test(m.name)) { for (const mt of [].concat(m.material)) { if (mt.map && !mt.userData.gray) { mt.map = grayMap(mt.map); mt.userData.gray = true; } mt.color.copy(hairC).multiplyScalar(0.8); } }
-      if (/^beard__/.test(m.name)) { for (const mt of [].concat(m.material)) { if (!mt.userData.strands) { mt.map = strandsTex(/full/.test(m.name)); mt.alphaTest = 0; mt.alphaHash = true; mt.transparent = false; mt.userData.strands = true; mt.roughness = 0.9; mt.needsUpdate = true; } mt.color.copy(hairC).multiplyScalar(0.9); } }
-      if (/^eyes__/.test(m.name) && this._eyes !== c.eyes) { for (const mt of [].concat(m.material)) if (mt.map && mt.map.image) { mt.map = recolorIris(mt.map, c.eyes); mt.needsUpdate = true; } }
+      if (/^brows__/.test(m.name)) { for (const mt of [].concat(m.material)) { if (mt.map && !mt.userData.gray) { mt.map = grayCached(mt.map); mt.userData.gray = true; } mt.color.copy(hairC).multiplyScalar(0.8); } }
+      if (/^beard__/.test(m.name)) { for (const mt of [].concat(m.material)) { if (!mt.userData.strands) { const dn = /full/.test(m.name); mt.map = shared.strands[dn] || (shared.strands[dn] = strandsTex(dn)); mt.alphaTest = 0; mt.alphaHash = true; mt.transparent = false; mt.userData.strands = true; mt.roughness = 0.9; mt.needsUpdate = true; } mt.color.copy(hairC).multiplyScalar(0.9); } }
+      if (/^eyes__/.test(m.name) && this._eyes !== c.eyes) { for (const mt of [].concat(m.material)) if (mt.map && mt.map.image) { const src = mt.map.userData.src || mt.map.image; const k = c.eyes; if (!shared.iris[k]) { const t0 = mt.map; t0.userData.src = src; shared.iris[k] = recolorIris(t0, k); } mt.map = shared.iris[k]; mt.needsUpdate = true; } }
     }
     this._eyes = c.eyes;
   }
