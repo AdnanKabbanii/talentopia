@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
 <style>
-:root{--navy:#101A32;--cloud:#F5F7FB;--violet:#8056F6;--cyan:#51C9E8;--lilac:#C8B8F4;--mint:#78D8B5;--gold:#F3C679;--coral:#F3A7B5;--ink:#101A32;--muted:#5d6580;--glass:rgba(245,247,251,.86);--line:rgba(16,26,50,.10)}
+:root{--navy:#111827;--cloud:#F6F8FC;--violet:#8D70FF;--cyan:#42DBFF;--metal:#A7B9C9;--lilac:#C8B8F4;--mint:#78D8B5;--gold:#D8B98A;--coral:#F3A7B5;--ink:#111827;--muted:#5b6476;--glass:rgba(246,248,252,.84);--line:rgba(17,24,39,.10)}
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#cfd9e6;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none;touch-action:none}
 canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none}
 .glass{background:var(--glass);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border:1px solid rgba(255,255,255,.7);box-shadow:0 10px 30px rgba(16,26,50,.14);border-radius:16px}
@@ -20,7 +20,7 @@ button{font:inherit;cursor:pointer;border:0;border-radius:12px}
 #top{position:fixed;left:14px;right:14px;top:12px;display:flex;gap:10px;align-items:center;z-index:5;pointer-events:none}
 #top>*{pointer-events:auto}
 .brand{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px}
-.brand i{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--violet),var(--cyan));display:grid;place-items:center;color:#fff;font-style:normal;font-weight:800}
+.brand i{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--navy),var(--violet));display:grid;place-items:center;color:#fff;font-style:normal;font-weight:800}
 .brand b{display:block;font-size:15px}.brand span{font-size:12px;color:var(--muted)}
 .spacer{flex:1}
 .chip{padding:10px 14px;font-weight:700;font-size:13px;display:flex;gap:6px;align-items:center}
@@ -90,8 +90,11 @@ button{font:inherit;cursor:pointer;border:0;border-radius:12px}
 #eBtn{position:fixed;right:22px;bottom:230px;width:64px;height:64px;border-radius:50%;background:var(--violet);color:#fff;font-weight:800;font-size:20px;display:none;z-index:6}
 #runBtn{position:fixed;right:96px;bottom:230px;width:56px;height:56px;border-radius:50%;background:rgba(16,26,50,.65);color:#fff;font-weight:800;font-size:12px;display:none;z-index:6}
 #runBtn.on{background:var(--cyan);color:var(--navy)}
-#overlay{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:radial-gradient(1200px 700px at 30% 10%,#e9e4fb,#F5F7FB 60%,#dfe9f5);overflow:auto;padding:20px}
-#overlay .card{width:min(860px,100%);padding:26px}
+#overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:flex-start;background:linear-gradient(90deg,rgba(246,248,252,.96) 0%,rgba(246,248,252,.82) 36%,rgba(246,248,252,0) 64%);overflow:auto;padding:28px 4vw}
+#overlay .card{width:min(600px,100%);padding:26px;box-shadow:0 30px 80px rgba(17,24,39,.18)}
+body.intro #top,body.intro #where,body.intro #obj,body.intro #mini,body.intro #hint,body.intro #credits{display:none!important}
+#flyCap{position:fixed;right:32px;bottom:36px;z-index:21;color:#fff;font:800 24px 'Plus Jakarta Sans',sans-serif;letter-spacing:.2px;text-shadow:0 2px 18px rgba(17,24,39,.55);transition:opacity .4s;pointer-events:none;max-width:44vw;text-align:right}
+#flyCap::before{content:'';display:block;margin:0 0 10px auto;width:56px;height:3px;background:var(--gold)}
 #overlay h1{margin:6px 0 4px;font-size:30px;letter-spacing:-.5px}
 #overlay p.lead{margin:0 0 16px;color:var(--muted);font-size:15px;line-height:1.5}
 .avatars{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0 16px}
@@ -111,12 +114,13 @@ button{font:inherit;cursor:pointer;border:0;border-radius:12px}
   .brand span,#credits,#hint{display:none}.chip{padding:8px 10px;font-size:12px}
   #lab{left:0;right:0;top:auto;bottom:0;width:auto;max-height:55vh;border-radius:18px 18px 0 0}
   .avatars{grid-template-columns:repeat(2,1fr)}#map .panel{inset:2vh 2vw;flex-direction:column}#map aside{width:auto;max-height:34vh}
+  #overlay{align-items:flex-end;background:linear-gradient(0deg,rgba(246,248,252,.97) 0%,rgba(246,248,252,.9) 62%,rgba(246,248,252,0) 92%);padding:12px}#flyCap{top:18px;bottom:auto;right:16px;font-size:16px}
   #prompt{left:10px;right:170px;transform:none;bottom:212px;font-size:12px;padding:9px 11px}#dialog{bottom:10px}
   #top{left:8px;right:8px;gap:6px}.brand{padding:6px}.brand div{display:none}#mapBtn small{display:none}.chip{padding:7px 9px;font-size:11px}
 }
 </style>
 </head>
-<body>
+<body class="intro">
 <canvas id="c" tabindex="0"></canvas>
 <div id="top">
   <div class="brand glass"><i>T</i><div><b>Talentopia</b><span>Career City</span></div></div>
@@ -141,10 +145,11 @@ button{font:inherit;cursor:pointer;border:0;border-radius:12px}
 <div id="done"><div class="card glass"><div style="font-size:40px">🏅</div><h2 id="doneTitle" style="margin:6px 0">Challenge complete</h2><p id="doneText" style="color:#5d6580;line-height:1.5"></p><div class="row" style="justify-content:center"><button class="primary" id="doneNext">Continue exploring</button><button class="secondary" id="donePass">Open Passport</button></div></div></div>
 <div id="credits">3D people: MakeHuman / MPFB (CC0) · animation: Quaternius Universal Animation Library (CC0) · textures &amp; sky: Poly Haven (CC0) · heart: BodyParts3D © DBCLS (CC BY-SA 2.1 JP)</div>
 
+<div id="flyCap"></div>
 <div id="overlay">
   <div class="card glass">
     <div class="row"><div class="brand" style="padding:0"><i>T</i><div><b>Talentopia</b><span>MKT880 · Career exploration metaverse</span></div></div></div>
-    <h1>Walk through the career city</h1>
+    <h1>Welcome to Talentopia</h1>
     <p class="lead">One connected city of ten career districts. Start at Central Plaza, walk into MedCity General Hospital, try the Heart Lab, then continue along Talent Avenue to the bank, the agency and beyond. Every featured building has a real interior and a professional challenge.</p>
     <b style="font-size:14px">Choose your avatar</b>
     <div class="avatars" id="avatars"></div>

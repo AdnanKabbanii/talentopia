@@ -85,25 +85,18 @@ function capital(ctx) {
   sign(ctx, 'TALENTOPIA CENTRAL BANK', -22, 12.6, -85.85, 0, 1.0, { bg: null, fg: '#7a5a1e', glow: 0.1, backing: false });
   named(ctx, 'Talentopia Central Bank', 'capital', -22, -100, 36, 28, 16, 'bank');
   feature(ctx, { id: 'bank', name: 'Talentopia Central Bank', district: 'capital', face: 's', ...inner, x: -22, z: -104, w: 34, d: 20, gfH: 9.3 });
-  // finance tower (skyline anchor) with setback + lit crown
-  glassTower(ctx, { x: 26, z: -128, w: 24, d: 24, h: 54, tint: [60, 95, 140], seed: 41 });
-  glassTower(ctx, { x: 26, z: -128, w: 19, d: 19, y0: 54, h: 26, tint: [60, 95, 140], seed: 42 });
-  ctx.box(26, 80.9, -128, 12, 6, 12, M('metalLight'));
-  ctx.box(26, 86.9, -128, 9, 0.5, 9, M('yellow'));
-  faceSign(ctx, { x: 26, z: -128, w: 24, d: 24 }, 's', 'Bay Financial Tower', 4.5, 0.9, { bg: '#101A32', accent: '#F3C679' });
-  named(ctx, 'Bay Financial Tower', 'capital', 26, -128, 24, 24, 82);
+  // Capital Bay Bank Headquarters (Blender landmark): stone piers, setbacks, champagne-gold lattice crown
+  ctx.landmark('bank_hq', 26, 0.15, -128, 0, { w: 27, d: 27, h: 135, color: '#D8B98A' });
+  named(ctx, 'Capital Bay Bank Headquarters', 'capital', 26, -128, 27, 27, 135);
   // fintech hub: dark glass + cyan fins
   glassTower(ctx, { x: 30, z: -86, w: 26, d: 12, h: 16, tint: [40, 60, 80], seed: 43, mullion: '#111' });
   fins(ctx, { x: 30, z: -86, w: 26, d: 12 }, 's', { h: 16, step: 1.3, depth: 0.5, mat: M('cyan') });
   faceSign(ctx, { x: 30, z: -86, w: 26, d: 12 }, 's', 'Ledgerline Fintech', 3.9, 0.7, { bg: '#0b0f1a', fg: '#51C9E8', accent: '#51C9E8' });
   named(ctx, 'Ledgerline Fintech', 'capital', 30, -86, 26, 12, 16);
-  // investment centre: cylindrical tower
-  const gm = glassMat({ tint: [80, 110, 135], seed: 44 });
-  ctx.geo(ucyl(12, 12, 46, 40), gm, mat4(-25, 23, -160)); ctx.geo(new THREE.CylinderGeometry(12, 12, 0.6, 40), M('roof'), mat4(-25, 46.3, -160));
-  for (let y = 8; y < 46; y += 8) ctx.geo(new THREE.CylinderGeometry(12.3, 12.3, 0.35, 40), M('metalLight'), mat4(-25, y, -160));
-  ctx.collider(-34, -16, -169, -151, 0, 46); ctx.foot(-25, -160, 24, 24, '#cfc9bd');
-  sign(ctx, 'Meridian Investment Centre', -25, 4.2, -147.9, 0, 0.8, { bg: '#101A32', accent: '#F3C679' });
-  named(ctx, 'Meridian Investment Centre', 'capital', -25, -160, 24, 24, 46);
+  // investment centre: elliptical tower with pearl fins (Blender skyline kit)
+  ctx.landmark('tower_round', -25, 0.15, -160, 0, { w: 27, d: 21, h: 75 });
+  sign(ctx, 'Meridian Investment Centre', -25, 4.2, -149.4, 0, 0.8, { bg: '#111827', accent: '#D8B98A' });
+  named(ctx, 'Meridian Investment Centre', 'capital', -25, -160, 27, 21, 75);
   // bank forecourt trees
   for (const x of [-48, 4]) { treeAt(ctx, x, -80, 1, 0.15); planterAt(ctx, x, -92, 4, 1.4); }
 }
@@ -113,11 +106,7 @@ function creative(ctx) {
   blockBase(ctx, 130, -130, M('concrete'));
   const ag = featuredBuilding(ctx, { id: 'agency', name: 'Pulse Advertising Agency', district: 'creative', x: 105, z: -96, w: 30, d: 18, face: 's', gfH: 5,
     wallMat: M('white'), floorMat: M('parquet'), signText: 'PULSE · Advertising & Media', signOpts: { accent: '#F3A7B5' },
-    upper: (y) => {
-      mass(ctx, { x: 108, z: -97, w: 30, d: 19, y0: y, h: 6, mat: panelMat({ wall: '#cfc3f0', kind: 'ribbon', seed: 51 }), parapet: 0, units: false, collide: false });
-      glassTower(ctx, { x: 101, z: -95, w: 28, d: 18, y0: y + 6, h: 6, tint: [90, 90, 140], seed: 52, slab: false });
-      mass(ctx, { x: 107, z: -96, w: 24, d: 16, y0: y + 12, h: 4, mat: panelMat({ wall: '#f5f3ef', kind: 'punched', seed: 53 }), collide: false });
-    } });
+    upper: () => { ctx.landmark('agency_upper', 105, 0, -96, 0, { w: 30, d: 18, collide: false, foot: false }); } });
   // media studio with animated billboards
   mass(ctx, { x: 160, z: -96, w: 34, d: 22, h: 14, mat: M('charcoal'), seed: 54 });
   for (const [bx, bz, ry, s] of [[160, -84.8, 0, 1], [142.8, -96, -Math.PI / 2, 2]]) {
@@ -186,9 +175,9 @@ function nexus(ctx) {
   faceSign(ctx, { x: -94, z: 36, w: 22, d: 24 }, 'e', 'Robotics Lab', 7.4, 0.8, { bg: '#101A32', accent: '#51C9E8' });
   named(ctx, 'Nexus Robotics Lab', 'nexus', -94, 36, 22, 24, 19);
   // cyber security operations
-  glassTower(ctx, { x: -156, z: -30, w: 30, d: 30, h: 13, tint: [30, 40, 55], seed: 73, mullion: '#05070a' });
-  faceSign(ctx, { x: -156, z: -30, w: 30, d: 30 }, 'e', 'Sentinel Cyber Security', 10, 0.8, { bg: '#0b0f1a', fg: '#51C9E8', accent: '#51C9E8' });
-  named(ctx, 'Sentinel Cyber Security', 'nexus', -156, -30, 30, 30, 13);
+  ctx.landmark('tower_twist', -156, 0.15, -30, 0, { w: 28, d: 28, h: 110 });
+  faceSign(ctx, { x: -156, z: -30, w: 28, d: 28 }, 'e', 'Sentinel Cyber Security', 4.4, 0.8, { bg: '#111827', fg: '#42DBFF', accent: '#42DBFF', door: false });
+  named(ctx, 'Sentinel Cyber Security', 'nexus', -156, -30, 28, 28, 110);
   // AI data centre with cooling fans
   mass(ctx, { x: -156, z: 30, w: 34, d: 38, h: 9, mat: M('concrete'), units: false, seed: 74 });
   for (let i = 0; i < 4; i++) for (let k = 0; k < 3; k++) { const fx = -168 + i * 8, fz = 18 + k * 12; ctx.geo(ucyl(2.2, 2.2, 1.4, 20), M('metalLight'), mat4(fx, 9.7, fz)); ctx.geo(new THREE.CylinderGeometry(1.9, 1.9, 0.05, 20), M('charcoal'), mat4(fx, 10.43, fz)); }
@@ -206,11 +195,9 @@ function taste(ctx) {
       ctx.box(-148, y - 0.6, 85.2, 30, 0.12, 2.4, M('navy')); } }); // awning
   for (let i = 0; i < 6; i++) umbrellaTable(ctx, -164 + i * 6.4, 80.5, i % 2 ? '#F5F7FB' : '#101A32');
   // Hotel Aurelia
-  mass(ctx, { x: -96, z: 124, w: 24, d: 24, h: 8, mat: M('limestone'), parapet: 0, units: false });
-  mass(ctx, { x: -96, z: 124, w: 22, d: 22, y0: 8, h: 40, mat: panelMat({ wall: '#e4dccd', kind: 'punched', seed: 82, glass: [80, 100, 120] }), seed: 82 });
-  ctx.box(-96, 4.5, 111.2, 12, 0.3, 3.6, M('metalDark'));
-  faceSign(ctx, { x: -96, z: 124, w: 24, d: 24 }, 'n', 'Hotel Aurelia', 6, 1.0, { bg: null, fg: '#7a5a1e', glow: 0.1, backing: false });
-  named(ctx, 'Hotel Aurelia', 'taste', -96, 124, 24, 24, 48);
+  ctx.landmark('tower_slim', -96, 0.15, 124, Math.PI, { w: 22, d: 22, h: 95 });
+  faceSign(ctx, { x: -96, z: 124, w: 21, d: 21 }, 'n', 'Hotel Aurelia', 7.2, 1.0, { bg: null, fg: '#8a6a2e', glow: 0.1, backing: false, door: false });
+  named(ctx, 'Hotel Aurelia', 'taste', -96, 124, 22, 22, 95);
   // café row facing the boulevard
   const cafes = [['Olive & Thyme', '#556b2f'], ['Café Lumière', '#7a4b2a'], ['Noodle Lab', '#b03a2e'], ['Green Bowl', '#2f9e5b']];
   cafes.forEach(([nm, col], i) => { const z = 116 + i * 17; mass(ctx, { x: -178, z, w: 14, d: 15, h: 7 + (i % 2) * 2, mat: panelMat({ wall: ['#efe7da', '#e8ddd0', '#f1ece2', '#e2e6dd'][i], kind: 'punched', seed: 83 + i }), seed: 83 + i, units: false });
@@ -236,9 +223,9 @@ function market(ctx) {
     ctx.box(x, 0.15, 80.05, 12, 3, 0.08, M('glassClear'), { shadow: false });
     faceSign(ctx, { x, z: 88, w: 16, d: 16 }, 'n', nm, 4.6, 0.7, { bg: '#F5F7FB', fg: col }); named(ctx, nm, 'market', x, 88, 16, 16, 10); });
   // business & entrepreneurship centre
-  glassTower(ctx, { x: -26, z: 145, w: 38, d: 30, h: 30, tint: [75, 105, 130], seed: 96 });
-  faceSign(ctx, { x: -26, z: 145, w: 38, d: 30 }, 'n', 'Founders Business Centre', 4, 0.8, { bg: '#101A32', accent: '#FFCCAB' });
-  named(ctx, 'Founders Business Centre', 'market', -26, 145, 38, 30, 30);
+  ctx.landmark('tower_diagrid', -26, 0.15, 145, Math.PI, { w: 38, d: 26, h: 78 });
+  faceSign(ctx, { x: -26, z: 145, w: 38.4, d: 26.4 }, 'n', 'Founders Business Centre', 4.2, 0.8, { bg: '#111827', accent: '#D8B98A', door: false });
+  named(ctx, 'Founders Business Centre', 'market', -26, 145, 38, 26, 78);
   // logistics warehouse with loading docks and vans
   mass(ctx, { x: 32, z: 150, w: 40, d: 40, h: 11, mat: panelMat({ wall: '#c4c9cf', kind: 'ribbon', seed: 97, floors: 2, glass: [90, 100, 110] }), seed: 97 });
   for (let i = 0; i < 4; i++) { ctx.box(11.9, 0.15, 136 + i * 9, 0.2, 4, 3.6, M('charcoal')); }
@@ -257,14 +244,13 @@ function civic(ctx) {
   // civic square in front
   for (const x of [92, 168]) { treeAt(ctx, x, 84, 1.1, 0.15); treeAt(ctx, x, 96, 1, 0.15); benchAt(ctx, x + (x < 130 ? 6 : -6), 90, x < 130 ? Math.PI / 2 : -Math.PI / 2); }
   // law firm tower
-  mass(ctx, { x: 170, z: 166, w: 22, d: 22, h: 6, mat: M('limestone'), parapet: 0, units: false });
-  glassTower(ctx, { x: 170, z: 166, w: 20, d: 20, y0: 6, h: 34, tint: [85, 100, 120], seed: 101 });
-  faceSign(ctx, { x: 170, z: 166, w: 22, d: 22 }, 'w', 'Hale & Partners Law', 4.2, 0.8, { bg: '#101A32', accent: '#C8B8F4' });
-  named(ctx, 'Hale & Partners Law', 'civic', 170, 166, 22, 22, 40);
+  ctx.landmark('tower_stepped', 170, 0.15, 166, 0, { w: 23, d: 23, h: 100 });
+  faceSign(ctx, { x: 170, z: 166, w: 23.4, d: 23.4 }, 'w', 'Hale & Partners Law', 4.2, 0.8, { bg: '#111827', accent: '#C8B8F4' });
+  named(ctx, 'Hale & Partners Law', 'civic', 170, 166, 23, 23, 100);
   // teaching centre
-  mass(ctx, { x: 96, z: 166, w: 34, d: 24, h: 14, mat: panelMat({ wall: '#a8604a', kind: 'ribbon', seed: 102, glass: [80, 100, 115] }), seed: 102 });
-  faceSign(ctx, { x: 96, z: 166, w: 34, d: 24 }, 'e', 'Talentopia Teaching Centre', 11.2, 0.8, { bg: '#F5F7FB', fg: '#101A32', accent: '#C8B8F4' });
-  named(ctx, 'Talentopia Teaching Centre', 'civic', 96, 166, 34, 24, 14);
+  // Talentopia University main building + campanile (Blender landmark), entrance facing east
+  ctx.landmark('university', 96, 0.15, 166, Math.PI / 2, { w: 36, d: 30, h: 52, color: '#d9d0c0' });
+  named(ctx, 'Talentopia University', 'civic', 96, 166, 30, 36, 52);
   // social sciences institute
   panelBlock(ctx, { x: 176, z: 118, w: 18, d: 28, h: 18, wall: '#efe9de', kind: 'punched', seed: 103 });
   faceSign(ctx, { x: 176, z: 118, w: 18, d: 28 }, 'n', 'Institute of Social Sciences', 15, 0.7, { bg: '#101A32', accent: '#C8B8F4' });

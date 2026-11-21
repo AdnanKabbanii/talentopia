@@ -7,13 +7,15 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { Ctx, initMaterials, M, makeCar, Batch, WIND } from './kit.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { Ctx, initMaterials, M, makeCar, makeShuttle, Batch, WIND } from './kit.js';
 import * as TX from './textures.js';
 import { buildStreets, buildPlaza, buildMonorail, buildNav, findPath, nearestSidewalk, ROUTES, polyline, blockLoop, CITY, buildSignals, buildBackdrop, SIGNAL, XS, ZS, HALF } from './city.js';
 import { buildDistricts, DISTRICTS, PLAZA, districtAt } from './districts.js';
 import { furnish, furnishHospital } from './interiors.js';
 import { loadModel, Character } from './characters.js';
 import { createUI } from './ui.js';
+import { loadLandmarks, loadHospitalUpgrade } from './landmarks.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -52,20 +54,23 @@ const roomLights = [new THREE.PointLight(0xfff4e6, 0, 26, 1.6), new THREE.PointL
 // post-processing: ground-truth ambient occlusion (desktop), tone mapping + sRGB in the output pass
 let composer = null, gtao = null;
 if (!isTouch && new URLSearchParams(location.search).get('ao') !== '0') {
-  composer = new EffectComposer(renderer);
+  const rt = new THREE.WebGLRenderTarget(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio(), { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, rt);   // MSAA preserved in the post chain
   composer.addPass(new RenderPass(scene, camera));
   gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
   gtao.output = GTAOPass.OUTPUT.Default; gtao.blendIntensity = 0.9;
   gtao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
   gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 12 });
-  composer.addPass(gtao); composer.addPass(new OutputPass());
+  composer.addPass(gtao);
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.32, 0.45, 1.15)); // accents only (threshold > 1)
+  composer.addPass(new OutputPass());
 }
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
 // ------------------------------------------------------------------ loading
 const manager = new THREE.LoadingManager();
-let loadParts = { sky: 0, hospital: 0, avatar: 0 };
-const setLoad = (k, v) => { loadParts[k] = v; const p = (loadParts.sky + loadParts.hospital + 0.2) / 2.2; $('loadBar').style.width = Math.round(p * 100) + '%'; };
+let loadParts = { sky: 0, hospital: 0, avatar: 0, landmarks: 0 };
+const setLoad = (k, v) => { loadParts[k] = v; const p = (loadParts.sky + loadParts.hospital + loadParts.landmarks + 0.2) / 3.2; $('loadBar').style.width = Math.round(p * 100) + '%'; };
 function fail(msg) { const e = $('err'); e.style.display = 'block'; e.textContent = msg; console.error(msg); }
 addEventListener('error', e => { if (e.message) fail('Error: ' + e.message); });
 
@@ -132,8 +137,10 @@ function collide(p, r, y) {
 const HOSP = { ox: -140, oz: -56.1 };
 const hospital = { ready: false, markers: {}, doors: [], interior: null };
 const gltfLoader = new GLTFLoader(manager);
+loadLandmarks(ctx, scene, gltfLoader).then(() => { setLoad('landmarks', 1); checkReady(); });
 gltfLoader.load('assets/medcity/medcity.glb', g => {
   const root = g.scene; root.position.set(HOSP.ox, 0, HOSP.oz); scene.add(root); root.updateMatrixWorld(true);
+  loadHospitalUpgrade(root, gltfLoader);
   const keep = (o) => { const bb = new THREE.Box3().setFromObject(o); if (bb.isEmpty()) { const p = o.getWorldPosition(new THREE.Vector3()); return inZone(p.x, p.z, p.x, p.z); } return inZone(bb.min.x, bb.min.z, bb.max.x, bb.max.z); };
   const inZone = (x0, z0, x1, z1) => x0 >= HOSP.ox - 36 && x1 <= HOSP.ox + 42 && z0 >= HOSP.oz - 57 && z1 <= HOSP.oz - 14.5;
   const drop = [];
@@ -284,10 +291,37 @@ function updatePlayer(dt) {
 // ------------------------------------------------------------------ camera
 const camRay = new THREE.Ray(), hitV = new THREE.Vector3(), tmp = new THREE.Vector3(), box = new THREE.Box3();
 let photoCam = null;
+// opening flyover: a looping cinematic path across districts (behind the start screen), then a glide down to the avatar
+const FLY = [
+  { p: [120, 70, 150], t: [0, 40, -20], cap: 'Talentopia · Central Plaza' },
+  { p: [-60, 45, -20], t: [-140, 12, -95], cap: 'MedCity · Medicine & health' },
+  { p: [60, 60, -40], t: [20, 50, -128], cap: 'Capital Bay · Banking & finance' },
+  { p: [150, 30, -50], t: [110, 12, -96], cap: 'Creative Quarter · Marketing, media & design' },
+  { p: [180, 45, 60], t: [100, 20, 166], cap: 'Civic Square · Law, education & social sciences' },
+  { p: [140, 90, 40], t: [300, 20, 0], cap: 'Skyport · Aviation & mobility' },
+  { p: [-90, 70, 80], t: [-156, 50, -30], cap: 'Code Nexus · Software, AI & cybersecurity' },
+  { p: [-200, 45, 60], t: [-270, 8, 0], cap: 'Planet Lab · Science & sustainability' },
+];
+let flyT = 0, intro = null; const fA = new THREE.Vector3(), fB = new THREE.Vector3(), fC = new THREE.Vector3(), fD = new THREE.Vector3();
+const capEl = document.getElementById('flyCap');
+function flyover(dt) {
+  flyT += dt / 7; const n = FLY.length, i = Math.floor(flyT) % n, j = (i + 1) % n; let u = flyT % 1; u = u * u * (3 - 2 * u);
+  fA.fromArray(FLY[i].p).lerp(fB.fromArray(FLY[j].p), u); fC.fromArray(FLY[i].t).lerp(fD.fromArray(FLY[j].t), u);
+  camera.position.lerp(fA, 1 - Math.exp(-dt * 2)); camTarget.lerp(fC, 1 - Math.exp(-dt * 2)); camera.lookAt(camTarget);
+  if (capEl) { const k = flyT % 1; capEl.textContent = (k < 0.5 ? FLY[i] : FLY[j]).cap; capEl.style.opacity = Math.min(1, Math.abs(k - 0.5) * 4).toFixed(2); }
+}
+function introCam(dt) {
+  intro.t = Math.min(1, intro.t + dt / 2.6); const u = 1 - Math.pow(1 - intro.t, 3);
+  const goal = new THREE.Vector3(P.pos.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist, P.pos.y + 1.55 + Math.sin(camPitch) * camDist, P.pos.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist);
+  const look = new THREE.Vector3(P.pos.x, P.pos.y + 1.55, P.pos.z);
+  camera.position.copy(intro.from).lerp(goal, u); const lt = intro.look.clone().lerp(look, u); camera.lookAt(lt);
+  if (intro.t >= 1) { intro = null; camTarget.copy(look); }
+}
 function updateCamera(dt) {
   if (photoCam) { camera.position.set(photoCam[0], photoCam[1], photoCam[2]); camera.lookAt(photoCam[3], photoCam[4], photoCam[5]); return; }
   if (mode === 'lab' && heartPivot) { labCamera(dt); return; }
-  if (!player) { const t = performance.now() / 1000; camera.position.set(Math.sin(t * 0.05) * 260, 120, Math.cos(t * 0.05) * 260); camera.lookAt(0, 20, 0); return; }
+  if (!player) { flyover(dt); return; }
+  if (intro) { introCam(dt); return; }
   const inside = !!P.inside;
   const dist = inside ? Math.min(camDist, 4.2) : camDist, pitch = inside ? Math.max(camPitch, 0.2) : camPitch;
   const want = tmp.set(P.pos.x, P.pos.y + 1.55, P.pos.z);
@@ -529,7 +563,7 @@ function spawnTraffic() {
   ROUTES.forEach((r, ri) => {
     const pl = polyline(roundLoop(r, 5)); const n = Math.max(3, Math.round(pl.L / 120));
     for (let i = 0; i < n; i++) { const kind = (i + ri) % 5 === 0 ? 'van' : (i + ri) % 3 === 0 ? 'suv' : 'sedan';
-      const car = makeCar(colors[(i * 3 + ri) % colors.length], kind); scene.add(car); cars.push({ car, pl, s: (i / n) * pl.L, v: 8, cruise: 8 + Math.random() * 3, L: car.userData.L }); }
+      const car = (i % 4 === 1) ? makeShuttle() : makeCar(colors[(i * 3 + ri) % colors.length], kind); scene.add(car); cars.push({ car, pl, s: (i / n) * pl.L, v: 8, cruise: 8 + Math.random() * 3, L: car.userData.L }); }
   });
 }
 function updateTraffic(dt) {
@@ -621,7 +655,7 @@ $('sndBtn').onclick = () => { sndOn = !sndOn; $('sndBtn').textContent = sndOn ? 
 // ------------------------------------------------------------------ start
 let readyCount = 0;
 function checkReady() {
-  if (!loadParts.sky || !hospital.ready) return;
+  if (!loadParts.sky || !hospital.ready || !loadParts.landmarks) return;
   perf.readyAt = performance.now(); $('loadTxt').textContent = 'City ready. Choose your avatar and enter.'; const g = $('go'); g.disabled = false; g.textContent = 'Enter Talentopia →';
   loadModel(chosen).catch(() => {}); // prefetch the chosen avatar
   setupHeart();
@@ -635,8 +669,9 @@ $('go').onclick = async () => {
     if (w && w.x > CITY.minX && w.x < CITY.maxX && w.z > CITY.minZ && w.z < CITY.maxZ) { P.pos.set(w.x, w.y || 0, w.z); P.yaw = w.yaw || 0; }
     else { P.pos.set(plaza.spawn.x, plaza.P, plaza.spawn.z); P.yaw = plaza.spawn.ry; }
     const q = new URLSearchParams(location.search).get('go'); if (q) { const f = FEATURED.find(x => x.id === q); if (f) { setTimeout(() => travelTo(f), 50); } }
-    P.pos.y = groundAt(P.pos.x, P.pos.z, P.pos.y + 0.5); camYaw = P.yaw + Math.PI; camTarget.set(P.pos.x, P.pos.y + 1.55, P.pos.z);
+    P.pos.y = groundAt(P.pos.x, P.pos.z, P.pos.y + 0.5); camYaw = P.yaw + Math.PI;
     player.root.position.copy(P.pos);
+    intro = { t: 0, from: camera.position.clone(), look: camTarget.clone() }; if (capEl) capEl.style.display = 'none'; document.body.classList.remove('intro');
     $('overlay').style.display = 'none'; mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
     spawnPeople(); spawnTraffic();
   } catch (e) { fail('Could not load your avatar: ' + e.message); g.disabled = false; g.textContent = 'Try again'; }

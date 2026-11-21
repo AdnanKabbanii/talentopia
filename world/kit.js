@@ -137,11 +137,18 @@ export class Ctx {
     this.colliders = [];  // {x0,x1,z0,z1,y0,y1}
     this.floors = [];     // {x0,x1,z0,z1,h, slope:{axis,from,to,h0,h1}}
     this.footprints = []; // map drawing {x,z,w,d,color,kind}
-    this.interactables = []; this.doors = []; this.animated = []; this.clickMeshes = []; this.labels = []; this.hooks = {};
+    this.interactables = []; this.doors = []; this.animated = []; this.clickMeshes = []; this.labels = []; this.hooks = {}; this.landmarks = [];
   }
   box(x, y, z, w, h, d, mat, { ry = 0, collide = false, shadow = true, vOff = 0 } = {}) {
     this.batch.add(ubox(w, h, d, vOff), mat, mat4(x, y + h / 2, z, ry), shadow);
     if (collide) this.collider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, y, y + h);
+  }
+  // a Blender-authored landmark GLB: collider + footprint now, model streamed later (world/landmarks.js)
+  landmark(file, x, y, z, ry = 0, o = {}) {
+    const sw = Math.abs(Math.sin(ry)) > 0.5; const w = sw ? o.d : o.w, d = sw ? o.w : o.d;
+    if (o.collide !== false) this.collider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, 0, o.h || 60);
+    if (o.foot !== false) this.foot(x, z, w, d, o.color || '#cfc9bd');
+    this.landmarks.push({ file, x, y, z, ry, ...o });
   }
   collider(x0, x1, z0, z1, y0 = 0, y1 = 10) { this.colliders.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1), y0, y1 }); }
   floor(x0, x1, z0, z1, h, slope) { this.floors.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1), h, slope }); }
@@ -491,4 +498,18 @@ export function makeCar(color, kind = 'sedan') {
   const add = (geo, m) => { const me = new THREE.Mesh(geo, m); me.castShadow = true; me.receiveShadow = true; grp.add(me); };
   add(g.body, paint); add(g.win, M('charcoal')); add(g.wheels, M('rubber')); add(g.lights, M('lampHead')); add(g.tail, M('red'));
   grp.userData.L = g.L; return grp;
+}
+
+// Autonomous shuttle pod (Talentopia Transit): rounded pearl body, dark glazing band, cyan running light
+export function makeShuttle() {
+  const g = new THREE.Group(); const L = 5.6;
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.15, L - 2.3, 8, 20), new THREE.MeshPhysicalMaterial({ color: 0xf6f8fc, metalness: 0.2, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.06 }));
+  body.rotation.x = Math.PI / 2; body.scale.set(1, 1, 0.92); body.position.y = 1.35; g.add(body);
+  const glass = new THREE.Mesh(new THREE.CapsuleGeometry(1.17, L - 2.6, 6, 20), new THREE.MeshPhysicalMaterial({ color: 0x111827, metalness: 0.6, roughness: 0.08 }));
+  glass.rotation.x = Math.PI / 2; glass.scale.set(1.0, 1.0, 0.42); glass.position.y = 1.62; g.add(glass);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(2.36, 0.05, L - 1.2), new THREE.MeshStandardMaterial({ color: 0x42dbff, emissive: 0x42dbff, emissiveIntensity: 2.2 })); strip.position.y = 0.95; g.add(strip);
+  const wheel = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 16); wheel.rotateZ(Math.PI / 2);
+  for (const [x, z] of [[-0.95, 1.7], [0.95, 1.7], [-0.95, -1.7], [0.95, -1.7]]) { const w = new THREE.Mesh(wheel, M('rubber')); w.position.set(x, 0.32, z); g.add(w); }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.userData.L = L; return g;
 }

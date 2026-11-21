@@ -85,22 +85,9 @@ export function buildPlaza(ctx) {
   for (const s of [-1, 1]) for (const k of [-1, 1]) {
     ctx.box(s * 35.25, 0.15, k * 20.5, 0.5, P, 29, M('limestone'), { collide: true }); ctx.box(k * 20.5, 0.15, s * 35.25, 29, P, 0.5, M('limestone'), { collide: true });
   }
-  // Talentopia Tower (landmark) north of the fountain
-  const T = { x: 0, z: -22 };
-  ctx.box(T.x, P, T.z, 18, 0.4, 18, M('limestone'));
-  const tower = new THREE.Group();
-  const tg = glassMat({ tint: [95, 120, 165], bays: 6, floors: 4, bayW: 1.5, floorH: 4, seed: 11, warm: 0.2 });
-  const levels = 22;
-  for (let i = 0; i < levels; i++) { // gently twisting stack of floor plates
-    const w = 12 - i * 0.12, g = ubox(w, 4, w, i * 4); const m = new THREE.Mesh(g, tg); m.position.set(0, P + 0.4 + i * 4 + 2, 0); m.rotation.y = i * 0.035; m.castShadow = true; m.receiveShadow = true; tower.add(m);
-    const s = new THREE.Mesh(ubox(w + 0.5, 0.25, w + 0.5), M('white')); s.position.set(0, P + 0.4 + i * 4, 0); s.rotation.y = i * 0.035; tower.add(s);
-  }
-  const crown = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 6, 10, 4, 1, true), M('violet')); crown.position.set(0, P + 0.4 + levels * 4 + 5, 0); crown.rotation.y = Math.PI / 4 + levels * 0.035; tower.add(crown);
-  const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.4, 16, 8), M('metalLight')); spire.position.set(0, P + 0.4 + levels * 4 + 18, 0); tower.add(spire);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(7.5, 0.18, 8, 48), M('cyan')); ring.rotation.x = Math.PI / 2; ring.position.set(0, P + 0.4 + levels * 4 + 0.4, 0); tower.add(ring);
-  tower.position.set(T.x, 0, T.z); ctx.scene.add(tower); ctx.collider(T.x - 7, T.x + 7, T.z - 7, T.z + 7, 0, 100);
-  ctx.foot(T.x, T.z, 13, 13, '#8056F6');
-  sign(ctx, 'TALENTOPIA', T.x, P + 6.5, T.z + 6.3, 0, 1.6, { bg: null, fg: '#F5F7FB', glow: 0.6, backing: false });
+  // Talentopia Tower (Blender landmark, streamed as GLB) north of the fountain
+  const T = { x: 0, z: -20 };
+  ctx.landmark('talentopia_tower', T.x, P, T.z, 0, { w: 30, d: 30, h: 150, name: 'Talentopia Tower', district: 'plaza', color: '#8D70FF' });
   // fountain
   const F = { x: 0, z: 8 };
   ctx.geo(ucyl(9, 9.3, 0.7, 48), M('limestone'), mat4(F.x, P + 0.35, F.z));
@@ -136,6 +123,24 @@ export function buildPlaza(ctx) {
   // seating steps + sculpture on the raised plaza
   for (const s of [-1, 1]) { ctx.box(s * 22, P, -2, 10, 0.45, 1.2, M('wood'), { collide: true }); ctx.box(s * 22, P, 14, 10, 0.45, 1.2, M('wood'), { collide: true }); }
   ctx.geo(new THREE.TorusGeometry(2.2, 0.35, 16, 48), M('metalLight'), mat4(-14, P + 3.2, 26, 0.6)); ctx.box(-14, P, 26, 1.2, 1, 1.2, M('limestone'), { collide: true });
+  // holographic information panels (subtle, additive, slowly turning)
+  const holo = (x, z, lines, phase) => {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 320; const g = c.getContext('2d'); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.position.set(x, P + 2.6, z); ctx.scene.add(m);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 0.5, 24), M('metalLight')); base.position.set(x, P + 0.25, z); ctx.scene.add(base);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.05, 1.3, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0x42dbff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false })); beam.position.set(x, P + 1.1, z); ctx.scene.add(beam);
+    ctx.collider(x - 0.6, x + 0.6, z - 0.6, z + 0.6, 0, 3);
+    let last = -1;
+    ctx.animated.push(time => { m.rotation.y = phase + time * 0.15; m.position.y = P + 2.6 + Math.sin(time + phase) * 0.06;
+      const k = Math.floor(time / 5 + phase) % lines.length; if (k === last) return; last = k; const [title, sub, body] = lines[k];
+      g.clearRect(0, 0, 512, 320); g.strokeStyle = 'rgba(66,219,255,0.9)'; g.lineWidth = 3; g.strokeRect(6, 6, 500, 308);
+      g.fillStyle = 'rgba(66,219,255,0.10)'; g.fillRect(6, 6, 500, 308); g.fillStyle = 'rgba(66,219,255,0.95)'; g.font = '700 22px Plus Jakarta Sans, Arial'; g.fillText(sub, 28, 52);
+      g.fillStyle = '#F6F8FC'; g.font = '800 42px Plus Jakarta Sans, Arial'; g.fillText(title, 28, 112); g.font = '500 22px Plus Jakarta Sans, Arial'; g.fillStyle = 'rgba(246,248,252,0.85)';
+      body.forEach((l, i) => g.fillText(l, 28, 166 + i * 34)); g.fillStyle = 'rgba(141,112,255,0.9)'; g.fillRect(28, 280, 140, 6); t.needsUpdate = true; });
+  };
+  holo(-9, 30, [['MedCity', 'DISTRICT · NORTH-WEST', ['General Hospital · Heart Lab', 'Triage · Pharmacy · Med School']], ['Capital Bay', 'DISTRICT · NORTH', ['Central Bank · HQ tower', 'Loans · Markets · Exchange']], ['Creative Quarter', 'DISTRICT · NORTH-EAST', ['Pulse Agency · Media studio', 'Design · Fashion · Campaigns']]], 0.3);
+  holo(9, 30, [['Skyport', 'DISTRICT · EAST', ['Terminal · Control tower', 'Flight ops · Load control']], ['Civic Square', 'DISTRICT · SOUTH-EAST', ['Courthouse · University', 'Law · Education · Society']], ['Planet Lab', 'DISTRICT · WEST', ['Research institute · Biodomes', 'Energy · Chemistry · Climate']]], 2.1);
   // information kiosk with a city map
   ctx.box(12, P, 18, 1.6, 2.4, 0.4, M('navy'), { collide: true });
   sign(ctx, 'City map · Press M', 12, P + 1.6, 18.22, 0, 0.32, { bg: '#101A32', accent: '#51C9E8', backing: false });
