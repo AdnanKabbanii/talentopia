@@ -186,9 +186,24 @@ const HOSP = { ox: -140, oz: -56.1 };
 const hospital = { ready: false, markers: {}, doors: [], interior: null };
 const gltfLoader = new GLTFLoader(manager);
 loadLandmarks(ctx, scene, gltfLoader).then(() => { setLoad('landmarks', 1); checkReady(); });
+// V4: AI-generated heart sculpture (FLUX image -> TripoSR -> Blender clean-up) on a plinth in MedCity, beside the hospital
+const dracoGltf = () => dracoGltf.p || (dracoGltf.p = import('three/addons/loaders/DRACOLoader.js').then(({ DRACOLoader }) =>
+  new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'))));
+dracoGltf().then(l => l.load('assets/medcity/heart_sculpture.glb', g => {
+  const free = (x, z, r) => !ctx.colliders.some(b => x > b.x0 - r && x < b.x1 + r && z > b.z0 - r && z < b.z1 + r) && !(ctx.footprints || []).some(f => Math.abs(x - f.x) < f.w / 2 + r && Math.abs(z - f.z) < f.d / 2 + r);
+  const spot = [[-86, -82], [-88, -96], [-90, -110], [-112, -80], [-170, -80], [-86, -130]].find(([x, z]) => free(x, z, 3.2)); if (!spot) return;
+  const [x, z] = spot, root = new THREE.Group(); root.position.set(x, 0.15, z);
+  const stone = new THREE.MeshStandardMaterial({ color: 0xd9d2c5, roughness: 0.55 });
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.9, 1.1, 48), stone); plinth.position.y = 0.55; plinth.castShadow = plinth.receiveShadow = true; root.add(plinth);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1.72, 0.04, 8, 64), new THREE.MeshStandardMaterial({ color: 0x78d8b5, emissive: 0x5fe0a8, emissiveIntensity: 1.2 })); rim.rotation.x = Math.PI / 2; rim.position.y = 1.1; root.add(rim);
+  const h = g.scene; h.position.y = 1.1; h.traverse(o => { if (!o.isMesh) return; o.castShadow = true; o.receiveShadow = true;
+    o.material = new THREE.MeshPhysicalMaterial({ vertexColors: !!o.geometry.attributes.color, color: 0xffffff, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.4, sheenColor: new THREE.Color(0xff9080) }); });
+  const spin = new THREE.Group(); spin.add(h); root.add(spin); scene.add(root);
+  ctx.animated.push(t => { spin.rotation.y = t * 0.25; const b = 1 + Math.max(0, Math.sin(t * 7.3)) ** 6 * 0.035; h.scale.setScalar(b); }); // slow turn + a gentle heartbeat
+  ctx.collider(x - 1.9, x + 1.9, z - 1.9, z + 1.9, 0, 1.2);
+}, undefined, () => {}));
 // V4: realistic airliner (blender/airliner.py) replaces the placeholder aircraft at Skyport
-import('three/addons/loaders/DRACOLoader.js').then(({ DRACOLoader }) => {
-  const l = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'));
+dracoGltf().then(l => {
   l.load('assets/skyport/airliner.glb', g => {
     g.scene.traverse(o => { if (!o.isMesh) return; o.castShadow = true; o.receiveShadow = true;
       o.material = [].concat(o.material).map(m => { const n = m.name;
@@ -817,7 +832,12 @@ function setupHeart() {
   const pivot = new THREE.Group(); pivot.position.copy(hp); scene.add(pivot);
   if (svc && ivc) { const up = svc.clone().sub(ivc).normalize(); h.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(up, new THREE.Vector3(0, 1, 0))); }
   h.updateMatrixWorld(true); const c = new THREE.Box3().setFromObject(h).getCenter(new THREE.Vector3()); h.position.sub(c).add(hp); pivot.attach(h);
-  h.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); heartParts.push(o); } });
+  // V4: wet, living tissue look (clearcoat + soft sheen) on the anatomical BodyParts3D meshes; teaching colours stay readable
+  const tissue = { wall: 0x7d2320, tissue: 0x8a3a30, artery: 0xb3141c, papillary: 0xc0705c, valve: 0xeadfc4 };
+  h.traverse(o => { if (o.isMesh) { const m0 = o.material, n = (m0.name || '').toLowerCase();
+    const m = new THREE.MeshPhysicalMaterial({ color: tissue[n] !== undefined ? tissue[n] : m0.color, transparent: m0.transparent, opacity: m0.opacity, depthWrite: m0.depthWrite,
+      roughness: 0.32, clearcoat: 0.85, clearcoatRoughness: 0.18, sheen: 0.5, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xff8a7a), side: m0.side });
+    m.name = m0.name; o.material = m; heartParts.push(o); } });
   heartPivot = pivot; ui.heart.bind({ parts: heartParts, paint: paintParts });
 }
 const labOrbit = { yaw: 0, pitch: 0.1, dist: 1.9 };
