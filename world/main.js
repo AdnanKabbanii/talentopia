@@ -58,6 +58,16 @@ sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 10, far: 420 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; scene.add(sun); scene.add(sun.target);
 const SUN_DIR = new THREE.Vector3(0.55, 1, 0.35).normalize();
+// shadow camera follows the avatar but snaps to whole shadow-map texels in light space, so shadow edges
+// stay still while walking instead of crawling/shimmering across the city
+const SUN_BASIS = new THREE.Matrix4().lookAt(SUN_DIR, new THREE.Vector3(), new THREE.Vector3(0, 1, 0)), SUN_INV = SUN_BASIS.clone().invert(), _sv = new THREE.Vector3();
+function snapSun(fp) {
+  const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+  _sv.set(fp.x, 0, fp.z).applyMatrix4(SUN_INV);
+  _sv.x = Math.round(_sv.x / texel) * texel; _sv.y = Math.round(_sv.y / texel) * texel; _sv.z = Math.round(_sv.z / texel) * texel;
+  _sv.applyMatrix4(SUN_BASIS);
+  sun.target.position.copy(_sv); sun.position.copy(_sv).addScaledVector(SUN_DIR, 160);
+}
 // two pooled interior lights that follow the nearest interior (keeps the light count fixed, no shader recompiles)
 const roomLights = [new THREE.PointLight(0xfff4e6, 0, 26, 1.6), new THREE.PointLight(0xfff4e6, 0, 26, 1.6)]; roomLights.forEach(l => scene.add(l));
 // post-processing: ground-truth ambient occlusion (desktop), tone mapping + sRGB in the output pass
@@ -992,7 +1002,7 @@ function step(dtOverride) {
   for (const f of ctx.animated) f(elapsed, dt);
   updatePrompt(); updateBeacon(elapsed);
   // sun + shadow follow the avatar
-  const fp = player ? P.pos : camTarget; if (!wv.active) sun.position.set(fp.x + SUN_DIR.x * 160, SUN_DIR.y * 160, fp.z + SUN_DIR.z * 160); if (!wv.active) sun.target.position.set(fp.x, 0, fp.z);
+  const fp = player ? P.pos : camTarget; if (!wv.active) snapSun(fp);
   // interior lights follow the room you are in / nearest
   if (player) { const f = P.inside; roomLights.forEach((l, i) => { if (f) { const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2; l.position.set(cx + (i ? 1 : -1) * (f.x1 - f.x0) * 0.22, (f.floorH || 0.15) + (f.gfH || 5) - 1, cz + (i ? 1 : -1) * (f.z1 - f.z0) * 0.2); l.intensity += (60 - l.intensity) * 0.1; } else l.intensity *= 0.9; }); }
   // location label
