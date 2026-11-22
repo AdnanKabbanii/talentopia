@@ -121,8 +121,47 @@ function prepMaterial(o) {
     if (cards) { m.alphaToCoverage = true; m.roughness = 0.55; } // soft strand edges with MSAA instead of a hard cut-out line
     if (/eyelash|lashes/.test(n) || /^lashes__/.test(o.name)) { m.color && m.color.setRGB(0.05, 0.04, 0.04); m.alphaTest = 0.2; }
     if (!cards) m.opacity = 1; if (m.map) m.map.anisotropy = 8; m.needsUpdate = true;
+    const lash = /eyelash|lashes/.test(n) || /^lashes__/.test(o.name);
+    if ((eye || (cards && !lash)) && !m.isMeshPhysicalMaterial) {
+      const p = new THREE.MeshPhysicalMaterial(); THREE.MeshStandardMaterial.prototype.copy.call(p, m); p.name = m.name;
+      if (eye) { p.clearcoat = 1; p.clearcoatRoughness = 0.04; p.roughness = 0.25; p.envMapIntensity = 1.2; } // wet cornea highlight
+      else { p.sheen = 0.55; p.sheenRoughness = 0.38; p.sheenColor = new THREE.Color(0x8a7b6c); p.roughness = 0.5; } // silky strands
+      if (Array.isArray(o.material)) o.material[o.material.indexOf(m)] = p; else o.material = p;
+    }
   }
   o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
+}
+
+// ---------------------------------------------------------------- realistic skin
+// tiling micro-normal for pores and fine lines (generated once), plus a lighting tweak: light wraps a little past the
+// shadow line and the red channel wraps most, which is how light scattering under real skin looks (warm soft terminator)
+let poreTex = null;
+function poreNormal() {
+  if (poreTex) return poreTex;
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+  const h = new Float32Array(S * S); let seed = 7; const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 2600; k++) { const x = r() * S, y = r() * S, rad = 0.6 + r() * 1.4, d = 0.4 + r() * 0.6;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) { const q = (i * i + j * j) / (rad * rad); if (q < 1) { const X = (x + i + S) % S | 0, Y = (y + j + S) % S | 0; h[Y * S + X] -= d * (1 - q); } } }
+  for (let i = 0; i < h.length; i++) h[i] += (r() - 0.5) * 0.25;
+  const im = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const H = (X, Y) => h[((Y + S) % S) * S + ((X + S) % S)];
+    const dx = H(x + 1, y) - H(x - 1, y), dy = H(x, y + 1) - H(x, y - 1); const nx = -dx, ny = -dy, nz = 1.6, L = Math.hypot(nx, ny, nz); const o = (y * S + x) * 4;
+    im.data[o] = (nx / L * 0.5 + 0.5) * 255; im.data[o + 1] = (ny / L * 0.5 + 0.5) * 255; im.data[o + 2] = (nz / L * 0.5 + 0.5) * 255; im.data[o + 3] = 255; }
+  g.putImageData(im, 0, 0); poreTex = new THREE.CanvasTexture(c); poreTex.wrapS = poreTex.wrapT = THREE.RepeatWrapping; poreTex.repeat.set(22, 22); poreTex.anisotropy = 8;
+  return poreTex;
+}
+function skinize(m) {
+  if (!m.normalMap) { m.normalMap = poreNormal(); m.normalScale = new THREE.Vector2(0.28, 0.28); }
+  m.ior = 1.4; m.specularIntensity = 0.6; m.roughness = 0.52;
+  m.onBeforeCompile = sh => {
+    const from = 'reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
+    const chunk = THREE.ShaderChunk.lights_physical_pars_fragment; if (!chunk.includes(from)) return;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <lights_physical_pars_fragment>', chunk.replace(from,
+      `{ float nl = dot( geometryNormal, directLight.direction ); vec3 k = vec3( 0.45, 0.18, 0.1 );
+         vec3 wrap = clamp( ( vec3( nl ) + k ) / ( 1.0 + k ), 0.0, 1.0 );
+         reflectedLight.directDiffuse += wrap * directLight.color * BRDF_Lambert( material.diffuseColor ); }`));
+  };
+  m.customProgramCacheKey = () => 'skin-wrap'; m.needsUpdate = true;
 }
 function grayMap(tex) { // hair/brow texture -> normalised greyscale (keeps alpha) so material colour controls the hue
   const img = tex.image; const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
@@ -155,7 +194,7 @@ export class AvatarModel {
     this.root.traverse(o => { if (o.isMesh) { o.material = cloneMat(o.material); prepMaterial(o); this.meshes.push(o); this.byName[o.name] = o; if (o.geometry.attributes._hide) this.body = o; } });
     if (this.body && !Array.isArray(this.body.material)) { const m0 = this.body.material; // skin: soft sheen and a slightly satin finish
       const m = new THREE.MeshPhysicalMaterial({ map: m0.map, normalMap: m0.normalMap || null, color: m0.color.clone(), roughness: 0.58, metalness: 0, sheen: 0.18, sheenRoughness: 0.7, sheenColor: new THREE.Color(0xb98a74), clearcoat: 0.03, clearcoatRoughness: 0.7 });
-      m.name = m0.name; this.body.material = m; }
+      m.name = m0.name; skinize(m); this.body.material = m; }
     if (!this.body) this.body = this.meshes.find(o => !o.name.includes('__')) || this.meshes[0];
     this.bones = {}; for (const b of this.body.skeleton.bones) this.bones[b.name] = b;
     this.srcGeo = this.body.geometry; this.idx0 = this.srcGeo.index.array; this.hideAttr = this.srcGeo.attributes._hide;

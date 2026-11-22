@@ -158,6 +158,7 @@ export class Character {
     const targetLean = this.noLean ? 0 : THREE.MathUtils.clamp(-turn * speed * 0.01, -0.14, 0.14);
     this.lean += (targetLean - this.lean) * Math.min(1, dt * 6); this.leanG.rotation.z = this.lean;
     this.procedural(dt);
+    this.life(dt, speed);
     this.faceLife(dt);
   }
   // ---------------------------------------------------------------- procedural layer
@@ -200,6 +201,22 @@ export class Character {
           aim(B.upR, B.loR, dir, env * 0.9); aim(B.loR, B.handR, dir, env * 0.9);
         }
       }
+    }
+  }
+  // living layer on top of the clips: breathing, a slow weight shift and tiny head movements when standing,
+  // so nobody freezes like a mannequin between gestures
+  life(dt, speed = 0) {
+    const B = this.bones; if (!B.spine) return;
+    this.lifeT = (this.lifeT || this.phase * 20) + dt; const t = this.lifeT, still = Math.max(0, 1 - speed / 0.6);
+    const breath = Math.sin(t * 1.55 + this.phase * 6) ; // ~15 breaths a minute
+    const ry = this.root.rotation.y; _axis.set(Math.cos(ry), 0, -Math.sin(ry));
+    _q1.setFromAxisAngle(_axis, -breath * 0.012 * (0.5 + still)); worldRotate(B.spine, _q1); // chest rises and falls
+    if (still > 0.05 && B.neck && !(this.look.w > 0.5)) {
+      const n1 = Math.sin(t * 0.37 + this.phase * 9) * 0.6 + Math.sin(t * 0.91 + this.phase * 3) * 0.4, n2 = Math.sin(t * 0.29 + this.phase * 5);
+      _q1.setFromAxisAngle(_up, n1 * 0.035 * still); _q2.setFromAxisAngle(_axis, n2 * 0.02 * still); _q1.multiply(_q2); worldRotate(B.neck, _q1);
+    }
+    if (still > 0.05) { // weight shift: the whole body sways a few millimetres over a few seconds
+      const sw = Math.sin(t * 0.45 + this.phase * 4) * 0.012 * still; _q1.setFromAxisAngle(_v6.set(Math.sin(ry), 0, Math.cos(ry)), sw); worldRotate(B.spine, _q1);
     }
   }
   // blinking, expressions and visemes for models with facial morph targets
