@@ -122,4 +122,5 @@
 - **Lashes**: darker and fuller.
 - **Avatar Studio**: a dusk-violet look, with a skyline backdrop of out-of-focus city lights, a dark glossy floor, warm key light, and violet plus cyan rim lights. Passport portraits use the same look.
 - **Ready-made avatars**: **Layla** (long dark hair, full brows, natural makeup, tailored uniform) leads the line-up, and Kai wears the classic-cut uniform. All portraits and thumbnails were re-rendered from the live 3D models.
-- **Limits**: still a real-time MakeHuman body, not a photoreal render; the female uniform keeps the base suit's skirt; the hair cards come from the same CC0 set.
+- **Tailored cut with trousers**: the tailored jacket (skirt pieces removed) is worn over the suit trousers (jacket and shirt pieces removed). Each garment is split into its UV islands, and pieces are kept by their average height. The trousers' piping runs down the side seams, and the default and Layla wear dark shoes. Skin hiding uses the jacket's coverage above the hips and the trousers' below.
+- **Limits**: still a real-time MakeHuman body, not a photoreal render; the hair cards come from the same CC0 set.

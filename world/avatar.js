@@ -17,6 +17,9 @@ function augmentCatalog(cat) {
   for (const [id, base, label] of [['talentopia_m', 'male_elegantsuit01', 'Talentopia · classic cut'], ['talentopia_f', 'female_elegantsuit01', 'Talentopia · tailored cut']]) {
     const b = cat.parts.outfit.find(p => p.id === base); if (!b) continue; cat.parts.outfit.unshift({ ...b, id, label, style: 'talentopia', base }); cat.hideBits[id] = cat.hideBits[base];
   }
+  // tailored cut with trousers: the tailored jacket (skirt pieces removed) worn over the suit trousers (jacket and shirt pieces removed)
+  const tf = cat.parts.outfit.find(p => p.id === 'talentopia_f'), ms = cat.parts.outfit.find(p => p.id === 'male_elegantsuit01');
+  if (tf && ms) { tf.compose = [{ file: tf.file, keep: 'upper', bit: cat.hideBits.female_elegantsuit01 }, { file: ms.file, keep: 'lower', bit: cat.hideBits.male_elegantsuit01 }]; tf.label = 'Talentopia · tailored cut'; }
   return cat;
 }
 const navyCache = {};
@@ -25,6 +28,19 @@ function navyMap(tex) { let t = navyCache[tex.uuid]; if (t) return t;
   const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
   for (let i = 0; i < p.length; i += 4) { const l = (0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2]) / 255, k = 0.35 + 0.9 * l; p[i] = 22 * k; p[i + 1] = 26 * k; p[i + 2] = 44 * k; }
   g.putImageData(d, 0, 0); t = new THREE.CanvasTexture(c); t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; navyCache[tex.uuid] = t; return t; }
+const islandCache = {};
+function filterIslands(s0, keep) {
+  const key = s0.geometry.uuid + keep; if (islandCache[key]) return islandCache[key];
+  const g0 = s0.geometry, idx = g0.index.array, pos = g0.attributes.position, n = pos.count, par = new Int32Array(n).map((_, i) => i);
+  const find = a => { while (par[a] !== a) a = par[a] = par[par[a]]; return a; };
+  for (let i = 0; i < idx.length; i += 3) { const a = find(idx[i]), b = find(idx[i + 1]), c = find(idx[i + 2]); par[b] = a; par[c] = a; }
+  const sum = new Map(); for (let i = 0; i < n; i++) { const r = find(i), o = sum.get(r) || [0, 0]; o[0] += pos.getY(i); o[1]++; sum.set(r, o); }
+  const sk = s0.skeleton, pi = sk.bones.findIndex(b => b.name === 'pelvis'); const pelvisY = pi >= 0 ? new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[pi]).invert()).y : 0.95;
+  const ok = r => { const [t, c] = sum.get(r), y = t / c; return keep === 'upper' ? y > pelvisY - 0.04 : y < pelvisY - 0.06; };
+  const out = []; for (let i = 0; i < idx.length; i += 3) if (ok(find(idx[i]))) out.push(idx[i], idx[i + 1], idx[i + 2]);
+  const g = new THREE.BufferGeometry(); for (const k in g0.attributes) g.setAttribute(k, g0.attributes[k]); g.morphAttributes = g0.morphAttributes; g.morphTargetsRelative = g0.morphTargetsRelative; g.setIndex(out);
+  g.boundingSphere = g0.boundingSphere; g.boundingBox = g0.boundingBox; return (islandCache[key] = { geo: g, pelvisY });
+}
 const pipingCache = {};
 function pipingTex(geo) { // white lines on black along UV-island borders (garment seams, lapels, cuffs, hems) → emissive piping
   if (pipingCache[geo.uuid]) return pipingCache[geo.uuid];
@@ -77,7 +93,7 @@ function skinTex(id) { return shared.skins[id] || (shared.skins[id] = new Promis
 
 export const DEFAULT = { pres: -0.4, build: 0, muscle: 0.25, height: 1.0, jawWide: 0, chinStrong: 0, nose: 0, cheekbones: 0.25, eyesBig: 0, eyesUp: 0, lipsFull: 0, head: 0,
   skin: 'young_asian_female', tone: -0.06, makeup: 'none', eyes: '#5b3a22', hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', beard: 'none',
-  outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes01', glasses: 'none', hat: 'none' }; // new guests start in the Talentopia uniform
+  outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes06', glasses: 'none', hat: 'none' }; // new guests start in the Talentopia uniform
 export const PRESETS = {
   feminine: { pres: -0.8, build: -0.1, muscle: 0.2, hair: 'long01', brows: 'eyebrow001', beard: 'none', outfit: 'female_elegantsuit01', shoes: 'shoes01', skin: 'young_african_female', hairColor: '#1b1411', cheekbones: 0.4, jawWide: 0 },
   masculine: { pres: 0.85, build: 0.05, muscle: 0.5, hair: 'short02', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', shoes: 'shoes03', skin: 'young_caucasian_male', hairColor: '#3a2a1e', jawWide: 0.4, chinStrong: 0.3 },
@@ -85,7 +101,7 @@ export const PRESETS = {
 };
 // ready-made avatars offered during onboarding (portraits in assets/ui/avatars are renders of these exact configs)
 export const READY = [
-  { id: 'layla', name: 'Layla', cfg: { pres: -0.85, build: -0.1, muscle: 0.25, skin: 'young_asian_female', tone: -0.04, hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes01', cheekbones: 0.55, lipsFull: 0.35, eyesBig: 0.2, jawWide: 0, makeup: 'natural', eyes: '#5b3a22' } },
+  { id: 'layla', name: 'Layla', cfg: { pres: -0.85, build: -0.1, muscle: 0.25, skin: 'young_asian_female', tone: -0.04, hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes06', cheekbones: 0.55, lipsFull: 0.35, eyesBig: 0.2, jawWide: 0, makeup: 'natural', eyes: '#5b3a22' } },
   { id: 'aria', name: 'Aria', cfg: { pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01', cheekbones: 0.45, eyes: '#5b3a22' } },
   { id: 'leo', name: 'Leo', cfg: { pres: 0.85, build: 0.05, muscle: 0.5, skin: 'young_caucasian_male', hair: 'short02', hairColor: '#5a3a24', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', outfitTint: '#ffffff', shoes: 'shoes03', jawWide: 0.4, chinStrong: 0.3, eyes: '#3a6ea8' } },
   { id: 'mei', name: 'Mei', cfg: { pres: -0.7, build: -0.1, muscle: 0.2, skin: 'young_asian_female', hair: 'bob01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'round', eyes: '#5b3a22' } },
@@ -174,11 +190,13 @@ export class AvatarModel {
     const key = kind + ':' + id; if (this.partMeshes[key]) return this.partMeshes[key];
     if (this.loading[key]) return this.loading[key];
     const info = (this.catalog.parts[kind] || []).find(p => p.id === id); if (!info) return [];
-    const src = shared.parts[info.file] || (shared.parts[info.file] = load('assets/avatar/' + info.file));
-    return (this.loading[key] = src.then(g => {
-      const srcs = []; g.scene.traverse(o => { if (o.isSkinnedMesh) srcs.push(o); }); const list = [];
-      for (const s0 of srcs) {
+    const pieces = info.compose || [{ file: info.file }];
+    const srcs0 = pieces.map(pc => shared.parts[pc.file] || (shared.parts[pc.file] = load('assets/avatar/' + pc.file)));
+    return (this.loading[key] = Promise.all(srcs0).then(gs => {
+      const srcs = []; gs.forEach((g, k) => g.scene.traverse(o => { if (o.isSkinnedMesh) srcs.push([o, pieces[k].keep]); })); const list = [];
+      for (const [s0, keep] of srcs) {
         const s = s0.clone(); s.material = cloneMat(s0.material);
+        if (keep) { const f = filterIslands(s0, keep); s.geometry = f.geo; this.composeCutY = f.pelvisY; }
         const bones = s0.skeleton.bones.map(b => this.bones[b.name] || b);
         s.bind(new THREE.Skeleton(bones, s0.skeleton.boneInverses), s0.bindMatrix);
         s.name = kind + '__' + id; prepMaterial(s); this.body.parent.add(s); list.push(s);
@@ -200,7 +218,10 @@ export class AvatarModel {
     this.applyMorphs(); this.applyHide(); this.applyMaterials(); this.applyGlasses(); this.applyPin();
   }
   applyHide() { // hide body triangles fully covered by the chosen outfit + shoes
-    const bits = this.catalog.hideBits; const mask = ((bits[this.cfg.outfit] ?? -1) >= 0 ? 1 << bits[this.cfg.outfit] : 0) | ((bits[this.cfg.shoes] ?? -1) >= 0 ? 1 << bits[this.cfg.shoes] : 0);
+    const bits = this.catalog.hideBits; const info = this.catalog.parts.outfit.find(p => p.id === this.cfg.outfit);
+    const shoeMask = (bits[this.cfg.shoes] ?? -1) >= 0 ? 1 << bits[this.cfg.shoes] : 0;
+    if (info && info.compose) return this.applyHideCompose(info, shoeMask);
+    const mask = ((bits[this.cfg.outfit] ?? -1) >= 0 ? 1 << bits[this.cfg.outfit] : 0) | shoeMask;
     if (!this.hideAttr || !mask) { this.body.geometry = this.srcGeo; return; }
     let g = shared.geo[mask];
     if (!g) {
@@ -211,6 +232,15 @@ export class AvatarModel {
       g.morphAttributes = s0.morphAttributes; g.morphTargetsRelative = s0.morphTargetsRelative; g.setIndex(out);
       g.boundingBox = s0.boundingBox; g.boundingSphere = s0.boundingSphere; shared.geo[mask] = g;
     }
+    this.body.geometry = g;
+  }
+  applyHideCompose(info, shoeMask) {
+    const [up, lo] = info.compose, key = 'c' + up.bit + '_' + lo.bit + '_' + shoeMask; let g = shared.geo[key];
+    if (!g) { const h = this.hideAttr.array, src = this.idx0, pos = this.srcGeo.attributes.position, cut = this.composeCutY || 0.95, out = [];
+      const hid = v => { const b = Math.round(h[v]); return (b & (1 << up.bit)) || (b & shoeMask) || ((b & (1 << lo.bit)) && pos.getY(v) < cut - 0.08); };
+      for (let i = 0; i < src.length; i += 3) if (!(hid(src[i]) && hid(src[i + 1]) && hid(src[i + 2]))) out.push(src[i], src[i + 1], src[i + 2]);
+      const s0 = this.srcGeo; g = new THREE.BufferGeometry(); for (const k in s0.attributes) g.setAttribute(k, s0.attributes[k]); g.morphAttributes = s0.morphAttributes; g.morphTargetsRelative = s0.morphTargetsRelative; g.setIndex(out);
+      g.boundingBox = s0.boundingBox; g.boundingSphere = s0.boundingSphere; shared.geo[key] = g; }
     this.body.geometry = g;
   }
   applyMaterials() {
