@@ -168,6 +168,17 @@ export function boardTex(lines, { bg = '#0c1426', fg = '#f3c679', title = '' } =
 }
 
 // Leaf-cluster atlas for card foliage (alpha). 2x2 variants in one 512 texture.
+// Photo-scanned honey-locust style fronds (Poly Haven, CC0) on black: alpha comes from brightness, so no PNG is needed.
+export function photoLeafTex() {
+  if (cache.photoLeaf) return cache.photoLeaf;
+  const S = 1024, [c, g] = canvas(S, S); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso;
+  const img = new Image(); img.onload = () => {
+    g.drawImage(img, 0, 0, S, S); const d = g.getImageData(0, 0, S, S), px = d.data;
+    for (let i = 0; i < px.length; i += 4) { const l = Math.max(px[i], px[i + 1], px[i + 2]); px[i + 3] = Math.max(0, Math.min(255, (l - 18) * 6)); }
+    g.putImageData(d, 0, 0); t.needsUpdate = true; };
+  img.src = 'assets/tex/leaves_photo.jpg';
+  return (cache.photoLeaf = t);
+}
 export function leafTex(seed = 5) {
   if (cache.leaf) return cache.leaf;
   const S = 512, [c, g] = canvas(S, S), r = rng(seed);

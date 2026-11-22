@@ -20,6 +20,7 @@ import { ACTIVITIES } from './activities.js';
 import { loadModel, Character } from './characters.js';
 import { createUI } from './ui.js';
 import { loadLandmarks, loadHospitalUpgrade } from './landmarks.js';
+import { loadNYC } from './nyc.js';
 import { AvatarModel, AvatarStudio } from './avatar.js';
 import { Conversations, CAST } from './conversations.js';
 import { Speech } from './speech.js';
@@ -933,7 +934,11 @@ function checkReady() {
   $('goLbl').textContent = 'Enter Talent City'; $('goLbl2').textContent = 'Continue Exploring'; $('loadTxt').textContent = 'Ready';
   if (!avatarChar) loadModel(chosen).catch(() => {}); // fallback avatar
   loadHospital(); // next priority: the nearest featured building
+  // V4: New York blocks around the city (Blender-built, instanced), streamed after the city is usable
+  const np = PRESETS[presetName]; setTimeout(() => loadNYC(scene, { density: { high: 1, balanced: 0.75, light: 0.45 }[presetName] || 0.75, hiDetail: presetName !== 'light', shadows: np.shadow >= 2048 })
+    .then(r => { nyc = r; console.info('NYC blocks', r.userData.stats); }), 300);
 }
+let nyc = null;
 // ------------------------------------------------------------------ V3 onboarding: guest entry, ready-made avatar, returning visitors
 const returning = !DEMO && !!(progress.avatarV2 || progress.world);
 if (returning) { $('obWelcome').hidden = true; $('obBack').hidden = false; const n = Object.keys(progress.shifts || {}).length + (progress.done || []).length;
@@ -1036,6 +1041,6 @@ function drawDebug() { if (dbg.dataset.min) { dbg.innerHTML = `${perf.fps.toFixe
   dbg.querySelector('#dbgCopy').onclick = () => { const t = report(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => ui.toast('Report copied, paste it to Claude')).catch(() => { prompt('Copy this report:', t); }); }; }
 function frame() { perfTick(); try { step(); } catch (e) { if ((frame.errs = (frame.errs || 0) + 1) < 4) console.error('frame error', e); } requestAnimationFrame(frame); } // one bad frame must never freeze the world
 frame();
-window.__talentopia = { get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
+window.__talentopia = { get nyc() { return nyc; }, get mode() { return mode; }, get pos() { return P.pos; }, get yaw() { return P.yaw; }, get speed() { return P.speed; }, get objIdx() { return objIdx; },
   get inside() { return P.inside && P.inside.id; }, travel: id => { const f = FEATURED.find(x => x.id === id); if (f) travelTo(f); }, featured: () => FEATURED.map(f => f.id),
   goTo: id => { const f = FEATURED.find(x => x.id === id); if (f) goToBuilding(f); }, keys, camera, step, ui, P, groundAt, avatar, studio, report: () => report(), Q, photo: (a) => { photoCam = a; }, ctx, colGrid, get composer() { return composer; }, renderer, get player() { return player; }, peds, cars, PRO_CHARS, FEATURED, STATIONS, interact, conv, speech, talk, staging, runAction, wv, openWorldView, enterWorld, passport, nova, trailStep, get guide() { return guide; }, progress, settings, applySettings, get preset() { return presetName; }, perf, get current() { return current; }, setCam: (y, p, d) => { camYaw = y; if (p !== undefined) camPitch = p; if (d) camDist = d; } };

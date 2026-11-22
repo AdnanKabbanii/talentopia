@@ -15,10 +15,24 @@ export class Speech {
   }
   get available() { return !!this.synth; }
   setEnabled(on) { this.enabled = on && !!this.synth; try { localStorage.setItem('talentopiaVoice', on ? 'on' : 'off'); } catch (e) {} if (!on) this.stopAudio(); }
+  // rank voices by how natural they sound: neural/natural (Edge, Chrome), premium/enhanced (Apple), Google network voices,
+  // then everything else; novelty and old robotic voices are pushed to the bottom
+  score(v) {
+    const n = v.name; let s = 0;
+    if (/natural|neural/i.test(n)) s += 100; if (/premium/i.test(n)) s += 85; if (/enhanced/i.test(n)) s += 70;
+    if (/online/i.test(n)) s += 35; if (/^google/i.test(n)) s += 40; if (/siri/i.test(n)) s += 60;
+    if (/ava|zoe|samantha|aria|jenny|emma|sonia|libby|andrew|brian|guy|ryan|evan|nathan|serena|daniel/i.test(n)) s += 12;
+    if (/en[-_](us|gb)/i.test(v.lang)) s += 6;
+    if (/albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|ralph|junior|kathy|fred|grandma|grandpa|eddy|flo|reed|rocko|sandy|shelley/i.test(n)) s -= 200;
+    return s;
+  }
   pick(gender, seed = 0) {
     const pool = this.voices.filter(v => (gender === 'f' ? FEMALE : MALE).test(v.name) && !(gender === 'f' ? MALE : FEMALE).test(v.name));
-    const local = pool.filter(v => v.localService); const list = local.length ? local : pool.length ? pool : this.voices;
-    return list.length ? list[seed % list.length] : null;
+    const list = (pool.length ? pool : this.voices).slice().sort((a, b) => this.score(b) - this.score(a));
+    if (!list.length) return null;
+    // vary voices between characters, but only among the best-sounding ones
+    const top = list.filter(v => this.score(v) >= this.score(list[0]) - 8);
+    return top[seed % top.length];
   }
   stopAudio() { if (this.synth) try { this.synth.cancel(); } catch (e) {} }
   // returns a line player: { update(dt) -> {jawOpen, mouthO, mouthE, word, done}, stop() }
@@ -28,7 +42,8 @@ export class Speech {
     const line = new Line(plain, rate);
     if (this.enabled && plain) {
       const u = new SpeechSynthesisUtterance(plain); const v = this.pick(gender, seed);
-      if (v) u.voice = v; u.rate = rate; u.pitch = pitch; u.lang = v ? v.lang : 'en-GB';
+      const natural = v && this.score(v) >= 60; // neural voices already sound warm: keep them close to neutral
+      if (v) u.voice = v; u.rate = rate * (natural ? 0.97 : 0.93); u.pitch = natural ? 1 + (pitch - 1) * 0.4 : Math.min(1.25, pitch * 1.04); u.volume = 0.9; u.lang = v ? v.lang : 'en-GB';
       u.onstart = () => { line.audio = true; line.t = 0; };
       u.onboundary = (e) => { if (e.name === 'word' || e.name === undefined) line.anchor(e.charIndex); };
       u.onend = u.onerror = () => { line.ended = true; };

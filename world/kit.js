@@ -94,7 +94,7 @@ export function initMaterials(envIntensity = 1) {
   mats.leaf = std({ color: 0x4f7a36, roughness: 0.85 });
   mats.leaf2 = std({ color: 0x648f40, roughness: 0.85 });
   mats.leaf3 = std({ color: 0x3b5a2c, roughness: 0.95 });
-  mats.bark = std({ color: 0x6b5442, roughness: 1 });
+  mats.bark = std({ ...TX.pbr('bark_photo', 1.2), roughness: 1 });
   mats.violet = std({ color: 0x8056f6, emissive: 0x8056f6, emissiveIntensity: 0.6, roughness: 0.4 });
   mats.cyan = std({ color: 0x51c9e8, emissive: 0x51c9e8, emissiveIntensity: 0.8, roughness: 0.4 });
   mats.lilac = std({ color: 0xc8b8f4, roughness: 0.5 });
@@ -365,8 +365,8 @@ export const WIND = { value: 0 };
 let leafMat = null, leafDepth = null;
 function leafMaterials() {
   if (leafMat) return [leafMat, leafDepth];
-  const map = TX.leafTex();
-  leafMat = new THREE.MeshStandardMaterial({ map, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.82, metalness: 0 });
+  const map = TX.photoLeafTex();
+  leafMat = new THREE.MeshStandardMaterial({ map, alphaTest: 0.4, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.75, metalness: 0, color: 0xe8f0dc });
   const sway = (shader) => { shader.uniforms.uWind = WIND;
     shader.vertexShader = 'uniform float uWind;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       #ifdef USE_INSTANCING
@@ -399,10 +399,10 @@ const treeParts = (v) => () => {
     // point inside the crown ellipsoid, biased to the surface
     let x, y, z; do { x = r() * 2 - 1; y = r() * 2 - 1; z = r() * 2 - 1; } while (x * x + y * y + z * z > 1);
     const k = 0.35 + 0.65 * Math.pow(r(), 0.35); const P = new THREE.Vector3(x * sp.rx * k, sp.cy + y * sp.ry * k, z * sp.rz * k);
-    const size = 1.3 + r() * 1.1; e.set(r() * Math.PI, r() * Math.PI * 2, r() * Math.PI); q.setFromEuler(e);
+    const size = 1.9 + r() * 1.3; e.set(r() * Math.PI, r() * Math.PI * 2, r() * Math.PI); q.setFromEuler(e);
     const qv = (r() * 2 | 0), qu = (r() * 2 | 0); // atlas quadrant
     const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3(a * size / 2, b * size / 2, 0).applyQuaternion(q).add(P));
-    const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([a, b]) => [(qu + a) / 2, (qv + b) / 2]);
+    const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([a, b]) => qu ? [1 - a, b] : [a, b]);
     for (const idx of [0, 1, 2, 0, 2, 3]) { const p = corners[idx]; pos.push(p.x, p.y, p.z); const n = p.clone().sub(C); n.y *= 0.6; n.normalize(); nor.push(n.x, n.y + 0.25, n.z); uv.push(...uvs[idx]); }
   }
   const leaves = new THREE.BufferGeometry(); leaves.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); leaves.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); leaves.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
