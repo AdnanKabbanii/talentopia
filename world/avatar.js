@@ -10,17 +10,74 @@ const $ = id => document.getElementById(id);
 // Assets are downloaded once and shared: every AvatarModel (the player and each staff member) is a skeleton clone of the same base,
 // with its own materials. Body index buffers (skin hidden under clothes) are cached per outfit+shoes combination.
 const shared = { p: null, parts: {}, gray: new WeakMap(), skins: {}, iris: {}, strands: {}, geo: {} };
+// Talentopia uniform: the tailored suits re-dressed in graphite navy with glowing violet piping along every seam and hem,
+// plus a small Talentopia pin (uses the replaceable logo placeholder). Added to the catalog at load, no extra download.
+function augmentCatalog(cat) {
+  if (cat._v3) return cat; cat._v3 = true;
+  for (const [id, base, label] of [['talentopia_m', 'male_elegantsuit01', 'Talentopia · classic cut'], ['talentopia_f', 'female_elegantsuit01', 'Talentopia · tailored cut']]) {
+    const b = cat.parts.outfit.find(p => p.id === base); if (!b) continue; cat.parts.outfit.unshift({ ...b, id, label, style: 'talentopia', base }); cat.hideBits[id] = cat.hideBits[base];
+  }
+  return cat;
+}
+const navyCache = {};
+function navyMap(tex) { let t = navyCache[tex.uuid]; if (t) return t;
+  const img = tex.image, c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4) { const l = (0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2]) / 255, k = 0.35 + 0.9 * l; p[i] = 22 * k; p[i + 1] = 26 * k; p[i + 2] = 44 * k; }
+  g.putImageData(d, 0, 0); t = new THREE.CanvasTexture(c); t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; navyCache[tex.uuid] = t; return t; }
+const pipingCache = {};
+function pipingTex(geo) { // white lines on black along UV-island borders (garment seams, lapels, cuffs, hems) → emissive piping
+  if (pipingCache[geo.uuid]) return pipingCache[geo.uuid];
+  const S = 1024, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, S, S);
+  const uv = geo.attributes.uv, idx = geo.index ? geo.index.array : null, n = idx ? idx.length : uv.count, q = v => Math.round(v * 4096);
+  const key = (a, b) => { const ka = q(uv.getX(a)) + ',' + q(uv.getY(a)), kb = q(uv.getX(b)) + ',' + q(uv.getY(b)); return ka < kb ? ka + '|' + kb : kb + '|' + ka; };
+  const cnt = new Map(), ends = new Map();
+  for (let i = 0; i < n; i += 3) { const t = idx ? [idx[i], idx[i + 1], idx[i + 2]] : [i, i + 1, i + 2];
+    for (let e = 0; e < 3; e++) { const a = t[e], b = t[(e + 1) % 3], k = key(a, b); cnt.set(k, (cnt.get(k) || 0) + 1); if (!ends.has(k)) ends.set(k, [a, b]); } }
+  g.strokeStyle = '#fff'; g.lineCap = 'round';
+  for (const [w, al] of [[9, 0.35], [4, 1]]) { g.lineWidth = w; g.globalAlpha = al; g.beginPath();
+    for (const [k, c2] of cnt) if (c2 === 1) { const [a, b] = ends.get(k); g.moveTo(uv.getX(a) * S, uv.getY(a) * S); g.lineTo(uv.getX(b) * S, uv.getY(b) * S); } g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; return (pipingCache[geo.uuid] = t);
+}
+function pinTexture() { // gold-rimmed badge; the centre shows the logo placeholder (assets/brand/logo.svg) once it loads
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const draw = (img) => { g.clearRect(0, 0, 128, 128); g.fillStyle = '#D8B98A'; g.beginPath(); g.arc(64, 64, 62, 0, 7); g.fill(); const gr = g.createLinearGradient(0, 0, 128, 128); gr.addColorStop(0, '#42DBFF'); gr.addColorStop(1, '#8D70FF');
+    g.fillStyle = gr; g.beginPath(); g.arc(64, 64, 52, 0, 7); g.fill(); if (img) { g.save(); g.beginPath(); g.arc(64, 64, 44, 0, 7); g.clip(); g.drawImage(img, 20, 20, 88, 88); g.restore(); } t.needsUpdate = true; };
+  draw(null); const img = new Image(); img.onload = () => draw(img); img.src = 'assets/brand/logo.svg'; return t;
+}
 function assets() {
   return shared.p || (shared.p = Promise.all([fetch('assets/avatar/avatar_catalog.json').then(r => r.json()), load('assets/avatar/avatar_base.glb'), load('assets/avatar/avatar_anims.glb')])
-    .then(([cat, base, anims]) => ({ cat, base, anims })));
+    .then(([cat, base, anims]) => ({ cat: augmentCatalog(cat), base, anims })));
 }
 const cloneMat = m => Array.isArray(m) ? m.map(x => x.clone()) : m.clone();
 function grayCached(tex) { let t = shared.gray.get(tex); if (!t) { t = grayMap(tex); shared.gray.set(tex, t); } return t; }
+// makeup regions come from the face's own morph targets: vertices moved by 'lipsFull' are the lips, by 'blinkL/R' the upper lids
+const faceRegions = {};
+function regionsFor(body) {
+  const g = body.geometry, key = g.uuid; if (faceRegions[key]) return faceRegions[key];
+  const dict = body.morphTargetDictionary || {}, mp = g.morphAttributes.position || [], idx = g.index.array, uv = g.attributes.uv;
+  const moved = (name, th) => { const a = mp[dict[name]]; if (!a) return null; const s = new Uint8Array(a.count); for (let i = 0; i < a.count; i++) if (Math.hypot(a.getX(i), a.getY(i), a.getZ(i)) > th) s[i] = 1; return s; };
+  const lips = moved('lipsFull', 0.0012), l1 = moved('blinkL', 0.002), l2 = moved('blinkR', 0.002);
+  const tris = (set) => { const out = []; if (!set) return out; for (let i = 0; i < idx.length; i += 3) { const a = idx[i], b = idx[i + 1], c = idx[i + 2]; if (set[a] && set[b] && set[c]) out.push([uv.getX(a), uv.getY(a), uv.getX(b), uv.getY(b), uv.getX(c), uv.getY(c)]); } return out; };
+  const lids = l1 && l2 ? l1.map((v, i) => v | l2[i]) : l1 || l2;
+  return (faceRegions[key] = { lips: tris(lips), lids: tris(lids) });
+}
+const makeupCache = {};
+function skinWithMakeup(tex, body, look) {
+  const k = tex.uuid + look; if (makeupCache[k]) return makeupCache[k];
+  const img = tex.image, W = img.width, H = img.height, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  const R = regionsFor(body), L = document.createElement('canvas'); L.width = W; L.height = H; const lg = L.getContext('2d');
+  const fill = (tris, col) => { lg.fillStyle = col; lg.beginPath(); for (const t of tris) { lg.moveTo(t[0] * W, t[1] * H); lg.lineTo(t[2] * W, t[3] * H); lg.lineTo(t[4] * W, t[5] * H); lg.closePath(); } lg.fill(); };
+  const bold = look === 'bold';
+  fill(R.lips, bold ? 'rgba(150,30,70,0.85)' : 'rgba(175,70,90,0.6)'); fill(R.lids, bold ? 'rgba(85,50,150,0.85)' : 'rgba(110,70,125,0.65)');
+  g.save(); g.filter = `blur(${Math.max(2, W / 600)}px)`; g.globalCompositeOperation = 'multiply'; g.drawImage(L, 0, 0); g.restore();
+  const t = new THREE.CanvasTexture(c); t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return (makeupCache[k] = t);
+}
 function skinTex(id) { return shared.skins[id] || (shared.skins[id] = new Promise(res => texLoader.load(`assets/avatar/skins/${id}.jpg`, t => { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }, undefined, () => res(null)))); }
 
 export const DEFAULT = { pres: -0.4, build: 0, muscle: 0.25, height: 1.0, jawWide: 0, chinStrong: 0, nose: 0, cheekbones: 0.25, eyesBig: 0, eyesUp: 0, lipsFull: 0, head: 0,
-  skin: 'young_caucasian_female', tone: 0, eyes: '#5b3a22', hair: 'bob01', hairColor: '#2a1d16', brows: 'eyebrow001', beard: 'none',
-  outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'none', hat: 'none' };
+  skin: 'young_asian_female', tone: -0.06, makeup: 'none', eyes: '#5b3a22', hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', beard: 'none',
+  outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes01', glasses: 'none', hat: 'none' }; // new guests start in the Talentopia uniform
 export const PRESETS = {
   feminine: { pres: -0.8, build: -0.1, muscle: 0.2, hair: 'long01', brows: 'eyebrow001', beard: 'none', outfit: 'female_elegantsuit01', shoes: 'shoes01', skin: 'young_african_female', hairColor: '#1b1411', cheekbones: 0.4, jawWide: 0 },
   masculine: { pres: 0.85, build: 0.05, muscle: 0.5, hair: 'short02', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', shoes: 'shoes03', skin: 'young_caucasian_male', hairColor: '#3a2a1e', jawWide: 0.4, chinStrong: 0.3 },
@@ -28,12 +85,12 @@ export const PRESETS = {
 };
 // ready-made avatars offered during onboarding (portraits in assets/ui/avatars are renders of these exact configs)
 export const READY = [
+  { id: 'layla', name: 'Layla', cfg: { pres: -0.85, build: -0.1, muscle: 0.25, skin: 'young_asian_female', tone: -0.04, hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes01', cheekbones: 0.55, lipsFull: 0.35, eyesBig: 0.2, jawWide: 0, makeup: 'natural', eyes: '#5b3a22' } },
   { id: 'aria', name: 'Aria', cfg: { pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01', cheekbones: 0.45, eyes: '#5b3a22' } },
   { id: 'leo', name: 'Leo', cfg: { pres: 0.85, build: 0.05, muscle: 0.5, skin: 'young_caucasian_male', hair: 'short02', hairColor: '#5a3a24', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', outfitTint: '#ffffff', shoes: 'shoes03', jawWide: 0.4, chinStrong: 0.3, eyes: '#3a6ea8' } },
   { id: 'mei', name: 'Mei', cfg: { pres: -0.7, build: -0.1, muscle: 0.2, skin: 'young_asian_female', hair: 'bob01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'round', eyes: '#5b3a22' } },
   { id: 'omar', name: 'Omar', cfg: { pres: 0.8, build: 0.15, muscle: 0.45, skin: 'young_asian_male', hair: 'short01', hairColor: '#141012', brows: 'eyebrow006', beard: 'full', outfit: 'male_elegantsuit01', outfitTint: '#6b6f78', shoes: 'shoes03', jawWide: 0.35, eyes: '#5b3a22' } },
-  { id: 'zara', name: 'Zara', cfg: { pres: -0.75, build: 0, muscle: 0.35, skin: 'young_caucasian_female', hair: 'ponytail01', hairColor: '#7a3420', brows: 'eyebrow001', outfit: 'female_sportsuit01', outfitTint: '#a9c2a4', shoes: 'shoes03', eyes: '#3f7a4a' } },
-  { id: 'kai', name: 'Kai', cfg: { pres: 0.1, build: 0, muscle: 0.35, skin: 'young_african_male', hair: 'short04', hairColor: '#141012', brows: 'eyebrow001', outfit: 'male_casualsuit05', outfitTint: '#b9a8f0', shoes: 'shoes03', glasses: 'rect', eyes: '#5b3a22' } },
+  { id: 'kai', name: 'Kai', cfg: { pres: 0.1, build: 0, muscle: 0.35, skin: 'young_african_male', hair: 'short04', hairColor: '#141012', brows: 'eyebrow001', outfit: 'talentopia_m', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'rect', eyes: '#5b3a22' } },
 ];
 const HAIR_COLORS = [['Black', '#141012'], ['Dark brown', '#2a1d16'], ['Brown', '#5a3a24'], ['Auburn', '#7a3420'], ['Copper', '#a5532a'], ['Blonde', '#c9a46a'], ['Platinum', '#e3dccb'], ['Grey', '#9a9a98'], ['Violet', '#6b4fd8']];
 const EYE_COLORS = [['Brown', '#5b3a22'], ['Hazel', '#7a6a32'], ['Green', '#3f7a4a'], ['Blue', '#3a6ea8'], ['Grey', '#6f7c86'], ['Amber', '#a8742a']];
@@ -44,7 +101,9 @@ const SKIN_LABELS = { young_caucasian_female: 'Light', young_caucasian_male: 'Li
 function prepMaterial(o) {
   for (const m of [].concat(o.material)) {
     const n = (m.name || '').toLowerCase(); const cards = /eyebrow|eyelash|afro|bob0|braid|long0|ponytail|short0|hair|beard/.test(n) || /^(hair|brows|lashes|beard)__/.test(o.name);
-    m.transparent = false; m.depthWrite = true; const eye = /high-poly|low-poly|eye/.test(n) && !/eyebrow|eyelash/.test(n) || /^eyes__/.test(o.name || ''); m.alphaTest = cards ? 0.45 : eye ? 0.35 : 0; m.side = cards ? THREE.DoubleSide : THREE.FrontSide;
+    m.transparent = false; m.depthWrite = true; const eye = /high-poly|low-poly|eye/.test(n) && !/eyebrow|eyelash/.test(n) || /^eyes__/.test(o.name || ''); m.alphaTest = cards ? 0.3 : eye ? 0.35 : 0; m.side = cards ? THREE.DoubleSide : THREE.FrontSide;
+    if (cards) { m.alphaToCoverage = true; m.roughness = 0.55; } // soft strand edges with MSAA instead of a hard cut-out line
+    if (/eyelash|lashes/.test(n) || /^lashes__/.test(o.name)) { m.color && m.color.setRGB(0.05, 0.04, 0.04); m.alphaTest = 0.2; }
     if (!cards) m.opacity = 1; if (m.map) m.map.anisotropy = 8; m.needsUpdate = true;
   }
   o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
@@ -78,6 +137,9 @@ export class AvatarModel {
     this.catalog = cat; this.gltf = base; this.animations = anims.animations; this.root = skClone(base.scene);
     this.meshes = []; this.byName = {};
     this.root.traverse(o => { if (o.isMesh) { o.material = cloneMat(o.material); prepMaterial(o); this.meshes.push(o); this.byName[o.name] = o; if (o.geometry.attributes._hide) this.body = o; } });
+    if (this.body && !Array.isArray(this.body.material)) { const m0 = this.body.material; // skin: soft sheen and a slightly satin finish
+      const m = new THREE.MeshPhysicalMaterial({ map: m0.map, normalMap: m0.normalMap || null, color: m0.color.clone(), roughness: 0.58, metalness: 0, sheen: 0.18, sheenRoughness: 0.7, sheenColor: new THREE.Color(0xb98a74), clearcoat: 0.03, clearcoatRoughness: 0.7 });
+      m.name = m0.name; this.body.material = m; }
     if (!this.body) this.body = this.meshes.find(o => !o.name.includes('__')) || this.meshes[0];
     this.bones = {}; for (const b of this.body.skeleton.bones) this.bones[b.name] = b;
     this.srcGeo = this.body.geometry; this.idx0 = this.srcGeo.index.array; this.hideAttr = this.srcGeo.attributes._hide;
@@ -121,6 +183,7 @@ export class AvatarModel {
         s.bind(new THREE.Skeleton(bones, s0.skeleton.boneInverses), s0.bindMatrix);
         s.name = kind + '__' + id; prepMaterial(s); this.body.parent.add(s); list.push(s);
         if (kind === 'hair') for (const m of [].concat(s.material)) if (m.map) m.map = grayCached(m.map);
+        if (info.style === 'talentopia') for (const m of [].concat(s.material)) { if (m.map && m.map.image) m.map = navyMap(m.map); m.emissive = new THREE.Color(0x9d84ff); m.emissiveMap = pipingTex(s.geometry); m.emissiveIntensity = 1.7; m.roughness = 0.55; m.metalness = 0.04; m.needsUpdate = true; }
       }
       this.partMeshes[key] = list; return list;
     }));
@@ -134,7 +197,7 @@ export class AvatarModel {
       if (/^brows__/.test(m.name)) m.visible = m.name === 'brows__' + c.brows;
       if (/^beard__/.test(m.name)) m.visible = m.name === 'beard__' + c.beard;
     }
-    this.applyMorphs(); this.applyHide(); this.applyMaterials(); this.applyGlasses();
+    this.applyMorphs(); this.applyHide(); this.applyMaterials(); this.applyGlasses(); this.applyPin();
   }
   applyHide() { // hide body triangles fully covered by the chosen outfit + shoes
     const bits = this.catalog.hideBits; const mask = ((bits[this.cfg.outfit] ?? -1) >= 0 ? 1 << bits[this.cfg.outfit] : 0) | ((bits[this.cfg.shoes] ?? -1) >= 0 ? 1 << bits[this.cfg.shoes] : 0);
@@ -152,8 +215,9 @@ export class AvatarModel {
   }
   applyMaterials() {
     const c = this.cfg, bm = this.body.material;
-    if (this._skin !== c.skin) { this._skin = c.skin; const want = c.skin; skinTex(want).then(t => { if (t && this.cfg.skin === want) { bm.map = t; bm.needsUpdate = true; } }); }
-    bm.color.setScalar(1 + c.tone);
+    const sk = c.skin + '|' + (c.makeup || 'none'); if (this._skin !== sk) { this._skin = sk; const want = c.skin, mk = c.makeup || 'none'; skinTex(want).then(t => { if (!t || this.cfg.skin !== want || (this.cfg.makeup || 'none') !== mk) return; bm.map = mk === 'none' ? t : skinWithMakeup(t, this.body, mk); bm.needsUpdate = true; }); }
+    { const k = 1 + c.tone; bm.color.setRGB(k, k * 0.95, k * 0.9); } // a gentle warm cast keeps skin from looking grey under cool city light
+    bm.envMapIntensity = 0.55;
     const hairC = new THREE.Color(c.hairColor);
     for (const key in this.partMeshes) {
       const [k] = key.split(':');
@@ -168,6 +232,23 @@ export class AvatarModel {
       if (/^eyes__/.test(m.name) && this._eyes !== c.eyes) { for (const mt of [].concat(m.material)) if (mt.map && mt.map.image) { const src = mt.map.userData.src || mt.map.image; const k = c.eyes; if (!shared.iris[k]) { const t0 = mt.map; t0.userData.src = src; shared.iris[k] = recolorIris(t0, k); } mt.map = shared.iris[k]; mt.needsUpdate = true; } }
     }
     this._eyes = c.eyes;
+  }
+  applyPin() { // small Talentopia pin on the left lapel of the uniform (logo placeholder: assets/brand/logo.svg); placed in the bind pose
+    if (this.pin) { this.pin.parent && this.pin.parent.remove(this.pin); this.pin = null; }
+    const info = this.catalog.parts.outfit.find(p => p.id === this.cfg.outfit); if (!info || info.style !== 'talentopia') return;
+    const mesh = (this.partMeshes['outfit:' + this.cfg.outfit] || [])[0]; if (!mesh || !mesh.skeleton) return;
+    const sk = mesh.skeleton, bi = sk.bones.findIndex(b => b.name === 'spine_03'); if (bi < 0) return;
+    const bp = new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[bi]).invert());
+    const side = this.front > 0 ? 1 : -1, px = bp.x + side * 0.075, py = bp.y + 0.05; // upper chest, on the lapel
+    const pos = mesh.geometry.attributes.position, mp = mesh.geometry.morphAttributes.position || [], inf = mesh.morphTargetInfluences || [], rel = mesh.geometry.morphTargetsRelative;
+    let best = null; const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i); for (let k = 0; k < mp.length; k++) if (inf[k]) { const dx = mp[k].getX(i), dy = mp[k].getY(i), dz = mp[k].getZ(i); if (rel) v.x += dx * inf[k], v.y += dy * inf[k], v.z += dz * inf[k]; }
+      if (Math.abs(v.x - px) < 0.025 && Math.abs(v.y - py) < 0.03) { const f = v.z * this.front; if (best === null || f > best) best = f; } }
+    if (best === null) return;
+    const tex = shared.logo || (shared.logo = pinTexture());
+    const pin = new THREE.Mesh(new THREE.CircleGeometry(0.017, 32), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.3, toneMapped: false }));
+    const m = new THREE.Matrix4().copy(sk.boneInverses[bi]).multiply(new THREE.Matrix4().makeTranslation(px, py, best * this.front + this.front * 0.005)).multiply(new THREE.Matrix4().makeRotationY(this.front > 0 ? 0 : Math.PI));
+    m.decompose(pin.position, pin.quaternion, pin.scale); sk.bones[bi].add(pin); this.pin = pin;
   }
   applyGlasses() {
     const head = this.bones.head; if (!head || !this.eyeCenter) return;
@@ -197,19 +278,30 @@ export class AvatarModel {
   }
 }
 
+// dusk skyline backdrop: violet-to-navy gradient with soft out-of-focus city lights (no external image)
+function duskBackdrop() {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 512); gr.addColorStop(0, '#2a1f5e'); gr.addColorStop(0.55, '#3b2a78'); gr.addColorStop(0.8, '#1d1a44'); gr.addColorStop(1, '#111827'); g.fillStyle = gr; g.fillRect(0, 0, 1024, 512);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 70; i++) { const x = rnd() * 1024, y = 170 + rnd() * 260, r = 6 + rnd() * 26, col = ['141,112,255', '66,219,255', '200,184,244', '255,214,170'][i % 4];
+    const rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, `rgba(${col},${0.35 + rnd() * 0.35})`); rg.addColorStop(1, `rgba(${col},0)`); g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+  for (let i = 0; i < 26; i++) { const w = 18 + rnd() * 50, h = 60 + rnd() * 170, x = rnd() * 1024; g.fillStyle = 'rgba(12,14,34,0.55)'; g.fillRect(x, 430 - h, w, h + 90); } // faint skyline silhouettes
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
 // ---------------------------------------------------------------- Avatar Studio
 export class AvatarStudio {
   constructor({ renderer, envMap, onDone, store }) {
     this.renderer = renderer; this.onDone = onDone; this.store = store; this.active = false;
-    const s = this.scene = new THREE.Scene(); s.background = new THREE.Color(0xeef1f7); s.environment = envMap || null; s.environmentIntensity = 0.6;
-    s.fog = new THREE.Fog(0xeef1f7, 8, 18);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.MeshStandardMaterial({ color: 0xf6f8fc, roughness: 0.6 })); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; s.add(floor);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.66, 64), new THREE.MeshBasicMaterial({ color: 0x8d70ff })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.002; s.add(ring);
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.74, 0.06, 64), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.1 })); disc.position.y = 0.03; disc.receiveShadow = true; s.add(disc);
-    const key = new THREE.DirectionalLight(0xfff3e6, 2.4); key.position.set(2.2, 3.4, 2.6); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -1.5, right: 1.5, top: 2.5, bottom: -0.5, near: 0.5, far: 10 }); key.shadow.bias = -0.0005; s.add(key);
-    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.8); fill.position.set(-2.5, 1.8, 1.5); s.add(fill);
-    const rim = new THREE.DirectionalLight(0xc8b8ff, 1.4); rim.position.set(-0.5, 2.6, -3); s.add(rim);
-    s.add(new THREE.HemisphereLight(0xffffff, 0xd9dde6, 0.6));
+    const s = this.scene = new THREE.Scene(); s.background = duskBackdrop(); s.environment = envMap || null; s.environmentIntensity = 0.45;
+    s.fog = new THREE.Fog(0x1b1640, 9, 24);
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(7, 64), new THREE.MeshStandardMaterial({ color: 0x151a30, roughness: 0.28, metalness: 0.35 })); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; s.add(floor);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.74, 0.79, 64), new THREE.MeshBasicMaterial({ color: 0x9d84ff, toneMapped: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.065; s.add(ring);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.74, 0.06, 64), new THREE.MeshStandardMaterial({ color: 0x1d2440, roughness: 0.25, metalness: 0.5 })); disc.position.y = 0.03; disc.receiveShadow = true; s.add(disc);
+    const key = new THREE.DirectionalLight(0xffe7d2, 1.9); key.position.set(2.8, 3.2, 1.7); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -1.5, right: 1.5, top: 2.5, bottom: -0.5, near: 0.5, far: 10 }); key.shadow.bias = -0.0005; s.add(key);
+    const fill = new THREE.DirectionalLight(0xbfd2ff, 0.55); fill.position.set(-2.5, 1.8, 1.5); s.add(fill);
+    const rim = new THREE.DirectionalLight(0x9d84ff, 3.2); rim.position.set(-1.6, 2.4, -3); s.add(rim); // violet rim (dusk city glow)
+    const rim2 = new THREE.DirectionalLight(0x42dbff, 1.6); rim2.position.set(2.0, 2.0, -2.6); s.add(rim2); // cyan rim
+    s.add(new THREE.HemisphereLight(0xb8b0ff, 0x1a1530, 0.45));
     this.turn = new THREE.Group(); this.turn.position.y = 0.06; s.add(this.turn);
     this.camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.05, 50);
     this.orbit = { yaw: 0.35, dist: 4.0, height: 1.0, tDist: 4.0, tHeight: 1.0 };
@@ -276,6 +368,7 @@ export class AvatarStudio {
     if (tab === 'body') body = `<h4>Quick start</h4><div class="chips"><button data-preset="feminine">Feminine</button><button data-preset="neutral">Neutral</button><button data-preset="masculine">Masculine</button><button data-random>Randomise</button></div>
       <h4>Proportions</h4>${slider('pres', 'Presentation', -1, 1, 0.05, 'Feminine', 'Masculine')}${slider('build', 'Build', -1, 1, 0.05, 'Slim', 'Fuller')}${slider('muscle', 'Muscle tone', 0, 1, 0.05)}${slider('height', `Height · ${Math.round(c.height * (170 + c.pres * 6))} cm`, 0.9, 1.1, 0.01)}`;
     if (tab === 'face') body = `<h4>Face structure</h4>${slider('jawWide', 'Jaw width', 0, 1, 0.05)}${slider('chinStrong', 'Chin', 0, 1, 0.05)}${slider('cheekbones', 'Cheekbones', 0, 1, 0.05)}${slider('nose', 'Nose', -1, 1, 0.05, 'Narrow', 'Wide')}${slider('lipsFull', 'Lips', 0, 1, 0.05)}${slider('head', 'Head shape', -1, 1, 0.05, 'Round', 'Square')}
+      <h4>Makeup</h4>${chips('makeup', [['none', 'None'], ['natural', 'Natural'], ['bold', 'Bold']])}
       <h4>Eyes</h4>${slider('eyesBig', 'Eye size', 0, 1, 0.05)}${slider('eyesUp', 'Eye angle', 0, 1, 0.05)}
       <h4>Expression preview</h4><div class="chips">${['neutral', 'smile', 'talk', 'surprised'].map(e => `<button data-expr="${e}" class="${this.expr === e ? 'on' : ''}">${e[0].toUpperCase() + e.slice(1)}</button>`).join('')}</div>
       <h4>Create my Digital Twin</h4><button class="st-row" data-photo><span>✦ Make an editable 3D likeness from a photo</span><em class="soon">Coming soon</em></button>`;

@@ -110,3 +110,16 @@
 - **Logo**: the official logo is still a placeholder (replace `assets/brand/logo.svg`).
 - **Not built**: there is no AI NOVA (scripted only) and no analytics backend.
 - **Districts**: individual district interiors were not redesigned in this phase, as planned.
+
+## Avatar upgrade (toward the reference look)
+- **Talentopia uniform** (`talentopia_f` tailored cut, `talentopia_m` classic cut): the tailored suits re-dressed in graphite navy.
+  - Glowing violet piping runs along every seam, lapel, cuff and hem. It is generated in the browser from each garment's UV-island borders and used as an emissive map, so bloom makes it glow.
+  - A gold-rimmed pin sits on the left lapel, showing the replaceable logo placeholder.
+  - Nothing extra is downloaded. New guests start in the uniform.
+- **Makeup** (None / Natural / Bold): lip tint and eyeshadow painted into the skin texture. The lips and eyelids are found from the face's own morph targets (the vertices that "fuller lips" and "blink" move), so the makeup lands exactly on them.
+- **Skin**: a physical material with a soft sheen and a gentle warm cast.
+- **Hair**: alpha-to-coverage gives soft strand edges instead of hard cut-out lines.
+- **Lashes**: darker and fuller.
+- **Avatar Studio**: a dusk-violet look, with a skyline backdrop of out-of-focus city lights, a dark glossy floor, warm key light, and violet plus cyan rim lights. Passport portraits use the same look.
+- **Ready-made avatars**: **Layla** (long dark hair, full brows, natural makeup, tailored uniform) leads the line-up, and Kai wears the classic-cut uniform. All portraits and thumbnails were re-rendered from the live 3D models.
+- **Limits**: still a real-time MakeHuman body, not a photoreal render; the female uniform keeps the base suit's skirt; the hair cards come from the same CC0 set.
