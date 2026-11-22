@@ -186,6 +186,19 @@ const HOSP = { ox: -140, oz: -56.1 };
 const hospital = { ready: false, markers: {}, doors: [], interior: null };
 const gltfLoader = new GLTFLoader(manager);
 loadLandmarks(ctx, scene, gltfLoader).then(() => { setLoad('landmarks', 1); checkReady(); });
+// V4: realistic airliner (blender/airliner.py) replaces the placeholder aircraft at Skyport
+import('three/addons/loaders/DRACOLoader.js').then(({ DRACOLoader }) => {
+  const l = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'));
+  l.load('assets/skyport/airliner.glb', g => {
+    g.scene.traverse(o => { if (!o.isMesh) return; o.castShadow = true; o.receiveShadow = true;
+      o.material = [].concat(o.material).map(m => { const n = m.name;
+        if (n === 'Paint' || n === 'Livery' || n === 'Belly') return new THREE.MeshPhysicalMaterial({ color: m.color, roughness: n === 'Belly' ? 0.4 : 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.1 });
+        if (n === 'Window') { m.metalness = 0.6; m.roughness = 0.05; m.envMapIntensity = 1.5; }
+        return m; });
+      if (o.material.length === 1) o.material = o.material[0]; });
+    for (const p of ctx.planes || []) { p.clear(); p.add(g.scene.clone()); }
+  });
+});
 function loadHospital() { if (loadHospital.started) return; loadHospital.started = true;
 gltfLoader.load('assets/medcity/medcity.glb', g => {
   const root = g.scene; root.position.set(HOSP.ox, 0, HOSP.oz); scene.add(root); root.updateMatrixWorld(true);

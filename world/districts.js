@@ -316,7 +316,7 @@ function sky(ctx) {
     const hs = new THREE.Mesh(new THREE.BoxGeometry(11, 0.3, 2.5), body); hs.position.set(0, 0.6, -15.5); g.add(hs);
     for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 4, 16), M('metalLight')); e.rotation.x = Math.PI / 2; e.position.set(s * 7, -1.6, 2.5); g.add(e); }
     const w = new THREE.Mesh(new THREE.BoxGeometry(4.04, 0.6, 26), M('charcoal')); w.position.set(0, 0.7, 0); w.scale.set(1, 1, 1); g.add(w);
-    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); return g; };
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); (ctx.planes = ctx.planes || []).push(g); return g; }; // swapped for the Blender airliner once it loads
   for (const [z, ry] of [[-30, -Math.PI / 2], [30, -Math.PI / 2]]) { const p = plane(); p.position.set(272, 3.4, z); p.rotation.y = ry; ctx.scene.add(p); ctx.collider(256, 290, z - 17, z + 17, 0, 7); }
   const flyer = plane(); ctx.scene.add(flyer);
   ctx.animated.push(t => { const c = (t % 60) / 60; let z, y; if (c < 0.6) { z = -180 + c / 0.6 * 300; y = 3.4 + Math.max(0, (c - 0.35) / 0.25) ** 2 * 24; } else { z = 120 + (c - 0.6) * 1200; y = 27.4 + (c - 0.6) * 500; }
