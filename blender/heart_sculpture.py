@@ -9,6 +9,10 @@ bpy.ops.import_scene.gltf(filepath=SRC)
 ob = [o for o in bpy.context.scene.objects if o.type == 'MESH'][0]
 bpy.context.view_layer.objects.active = ob; ob.select_set(True)
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+# TripoSR lays the heart on its side: stand it up so the great vessels point to the sky
+ROT = [float(x) for x in (a[2].split(',') if len(a) > 2 else '-80,0,0'.split(','))]
+from mathutils import Euler
+ob.data.transform(Euler([math.radians(r) for r in ROT], 'XYZ').to_matrix().to_4x4()); ob.data.update(); print('ROT', ROT)
 bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
 bpy.ops.mesh.remove_doubles(threshold=0.0005); bpy.ops.mesh.normals_make_consistent(inside=False)
 bpy.ops.object.mode_set(mode='OBJECT')

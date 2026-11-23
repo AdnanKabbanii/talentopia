@@ -197,7 +197,8 @@ dracoGltf().then(l => l.load('assets/medcity/heart_sculpture.glb', g => {
   const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.9, 1.1, 48), stone); plinth.position.y = 0.55; plinth.castShadow = plinth.receiveShadow = true; root.add(plinth);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(1.72, 0.04, 8, 64), new THREE.MeshStandardMaterial({ color: 0x78d8b5, emissive: 0x5fe0a8, emissiveIntensity: 1.2 })); rim.rotation.x = Math.PI / 2; rim.position.y = 1.1; root.add(rim);
   const h = g.scene; h.position.y = 1.1; h.traverse(o => { if (!o.isMesh) return; o.castShadow = true; o.receiveShadow = true;
-    o.material = new THREE.MeshPhysicalMaterial({ vertexColors: !!o.geometry.attributes.color, color: 0xffffff, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.4, sheenColor: new THREE.Color(0xff9080) }); });
+    const c = o.geometry.attributes.color; if (c) for (let i = 0; i < c.count; i++) for (let k = 0; k < c.itemSize && k < 3; k++) c.setComponent(i, k, Math.pow(c.getComponent(i, k), 2.2)); // AI vertex colours are sRGB
+    o.material = new THREE.MeshPhysicalMaterial({ vertexColors: !!c, color: 0xffffff, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.4, sheenColor: new THREE.Color(0xff9080) }); });
   const spin = new THREE.Group(); spin.add(h); root.add(spin); scene.add(root);
   ctx.animated.push(t => { spin.rotation.y = t * 0.25; const b = 1 + Math.max(0, Math.sin(t * 7.3)) ** 6 * 0.035; h.scale.setScalar(b); }); // slow turn + a gentle heartbeat
   ctx.collider(x - 1.9, x + 1.9, z - 1.9, z + 1.9, 0, 1.2);
