@@ -89,6 +89,8 @@ export function initMaterials(envIntensity = 1) {
   mats.brick = std({ map: TX.masonry({ kind: 'brick', base: '#8e4f3a' }), roughness: 0.9 });
   mats.brickDark = std({ map: TX.masonry({ kind: 'brick', base: '#5a4a44', seed: 9 }), roughness: 0.9 });
   mats.wood = std({ map: TX.woodSlats(), roughness: 0.7 });
+  mats.limestoneTrim = std({ color: 0xe6dccb, roughness: 0.8 }); // window surrounds on brick
+  mats.trimWhite = std({ color: 0xf4f2ee, roughness: 0.55 }); // window surrounds on render / panels
   mats.glassClear = new THREE.MeshPhysicalMaterial({ color: 0xbfd6e6, metalness: 0, roughness: 0.05, transmission: 0, transparent: true, opacity: 0.28, envMapIntensity: 1.5, depthWrite: false });
   mats.water = new THREE.MeshPhysicalMaterial({ color: 0x5f93a8, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.88, envMapIntensity: 1.4 });
   mats.leaf = std({ color: 0x4f7a36, roughness: 0.85 });
@@ -115,13 +117,131 @@ export function initMaterials(envIntensity = 1) {
   for (const m of Object.values(mats)) m.envMapIntensity = (m.envMapIntensity || 1) * envIntensity;
 }
 const facadeCache = {};
+// ---- glass with real rooms behind it ("interior mapping"): every window cell is a small 3D room (back wall, floor, ceiling
+// light strip, side walls, desks, blinds) traced in the shader, so walking past a facade shows depth and parallax instead of a
+// flat picture. Coated glass reflections come from the normal PBR path. UVs are in metres (ubox / upl), cell = one window.
+const INTERIOR_FRAG = `
+uniform vec2 iCell; uniform vec3 iTint; uniform vec3 iMull; uniform float iSpan, iSeed, iLit, iFrame, iWarm;
+varying vec3 vIWPos; varying vec2 vIUv;
+vec3 roomCol; float glassM;
+float ih( vec2 p ) { p = fract( p * vec2( 123.34, 456.21 ) + iSeed * 0.137 ); p += dot( p, p + 45.32 ); return fract( p.x * p.y ); }`;
+const INTERIOR_MAP = `
+{
+  vec2 q = vIUv / iCell, id = floor( q ), f = fract( q );
+  vec3 dpx = dFdx( vIWPos ), dpy = dFdy( vIWPos ); vec2 dux = dFdx( vIUv ), duy = dFdy( vIUv );
+  float det = dux.x * duy.y - dux.y * duy.x; det = abs( det ) < 1e-9 ? 1e-9 : det;
+  vec3 T = normalize( ( dpx * duy.y - dpy * dux.y ) / det ), Bv = normalize( ( dpy * dux.x - dpx * duy.x ) / det ), N = normalize( cross( T, Bv ) );
+  vec3 V = normalize( vIWPos - cameraPosition ); if ( dot( N, V ) > 0.0 ) N = -N;
+  float D = max( iCell.y * 1.5, 3.5 );
+  vec3 rd = vec3( dot( V, T ) / iCell.x, dot( V, Bv ) / iCell.y, max( dot( V, -N ), 0.05 ) / D );
+  rd += sign( rd ) * 1e-4 + vec3( 1e-5 );
+  vec3 ro = vec3( f, 0.0 ), tv = ( step( 0.0, rd ) - ro ) / rd; float t = min( min( tv.x, tv.y ), tv.z ); vec3 hp = ro + rd * t;
+  float r1 = ih( id ), r2 = ih( id + 17.3 ), r3 = ih( id + 41.9 ), lit = step( r1, iLit );
+  vec3 wallC = mix( vec3( 0.80, 0.76, 0.70 ), vec3( 0.86, 0.88, 0.90 ), r2 ), c;
+  if ( t == tv.z ) { // back wall with a desk, a screen or a plant
+    c = wallC * 0.92;
+    float dx0 = 0.12 + r2 * 0.3, dx1 = dx0 + 0.35 + r3 * 0.25;
+    float desk = step( dx0, hp.x ) * step( hp.x, dx1 ) * step( 0.2, hp.y ) * step( hp.y, 0.26 );
+    float leg = step( dx0 + 0.02, hp.x ) * step( hp.x, dx0 + 0.05 ) * step( hp.y, 0.2 );
+    float scr = step( r3, 0.6 ) * step( dx0 + 0.1, hp.x ) * step( hp.x, dx0 + 0.28 ) * step( 0.27, hp.y ) * step( hp.y, 0.4 );
+    float art = step( 0.55, r1 ) * step( 0.62, hp.x ) * step( hp.x, 0.86 ) * step( 0.5, hp.y ) * step( hp.y, 0.72 );
+    c = mix( c, vec3( 0.18, 0.17, 0.17 ), max( desk, leg ) ); c = mix( c, vec3( 0.05, 0.06, 0.08 ) + vec3( 0.1, 0.2, 0.45 ) * lit, scr );
+    c = mix( c, mix( vec3( 0.75, 0.42, 0.3 ), vec3( 0.3, 0.45, 0.7 ), r2 ), art );
+  } else if ( t == tv.y ) {
+    if ( rd.y < 0.0 ) c = mix( vec3( 0.36, 0.30, 0.26 ), vec3( 0.55, 0.55, 0.56 ), r3 ); // floor
+    else { c = vec3( 0.9 ); c += lit * 3.0 * smoothstep( 0.06, 0.0, abs( hp.z - 0.4 ) ) * step( 0.12, hp.x ) * step( hp.x, 0.88 ); } // ceiling light strip
+  } else c = wallC * 0.82; // side walls
+  vec3 lc = mix( vec3( 1.0, 0.88, 0.72 ), vec3( 0.94, 0.97, 1.0 ), step( iWarm, r2 ) );
+  vec3 room = lit > 0.5 ? c * lc * 0.4 * mix( 1.0, 0.5, hp.z ) : c * vec3( 0.07, 0.075, 0.085 ) * mix( 1.0, 0.5, hp.z );
+  // blinds in some windows (on the glass plane, no parallax)
+  float bl = step( r3, 0.3 ) * step( 1.0 - ( 0.25 + r1 * 0.5 ), f.y );
+  room = mix( room, vec3( 0.78, 0.74, 0.66 ) * ( 0.55 + 0.45 * lit ) * ( 0.9 + 0.1 * step( 0.5, fract( f.y * iCell.y * 12.0 ) ) ), bl );
+  // far away the cells get smaller than a few pixels: fade to the average colour so nothing shimmers
+  vec2 fw = fwidth( q ); float lod = smoothstep( 0.06, 0.25, max( fw.x, fw.y ) );
+  room = mix( room, lit > 0.5 ? vec3( 0.22, 0.21, 0.2 ) : vec3( 0.03 ), lod );
+  float fx = iFrame / iCell.x, fy = iFrame / iCell.y;
+  float frame = ( 1.0 - step( fx, f.x ) * step( f.x, 1.0 - fx ) * step( fy, f.y ) * step( f.y, 1.0 - fy ) ) * step( 0.0001, iFrame ) * ( 1.0 - lod * 0.7 );
+  float span = iSpan * step( f.y, 0.14 );
+  glassM = ( 1.0 - frame ) * ( 1.0 - span );
+  float fres = 0.12 + 0.88 * pow( 1.0 - abs( dot( V, N ) ), 4.0 );
+  roomCol = room * iTint * glassM * ( 1.0 - fres );
+  diffuseColor.rgb = mix( mix( iMull, iTint * 0.22, span ), iTint * 0.13, glassM ); // glass: no diffuse, ~13% tinted reflection at normal incidence
+}`;
+function interiorize(m, { cell = [1.6, 4], tint = [70, 110, 150], mullion = '#2a3340', spandrel = true, frame = 0.05, lit = 0.72, seed = 1, warm = 0.4 }) {
+  const t = new THREE.Vector3(...tint).divideScalar(255); const avg = (t.x + t.y + t.z) / 3 || 1; t.divideScalar(avg).lerp(new THREE.Vector3(1, 1, 1), 0.55);
+  const U = { iCell: { value: new THREE.Vector2(...cell) }, iTint: { value: new THREE.Color(t.x, t.y, t.z) }, iMull: { value: new THREE.Color(mullion).convertSRGBToLinear() },
+    iSpan: { value: spandrel ? 1 : 0 }, iSeed: { value: seed }, iLit: { value: lit }, iFrame: { value: frame }, iWarm: { value: warm } };
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vIWPos;\nvarying vec2 vIUv;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvIUv = uv;\nvIWPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>' + INTERIOR_FRAG)
+      .replace('#include <map_fragment>', '#include <map_fragment>' + INTERIOR_MAP)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix( 0.55, 0.05, glassM );')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix( 0.3, 1.0, glassM );')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += roomCol;');
+  };
+  m.customProgramCacheKey = () => 'interior-glass'; return m;
+}
+export function roomGlass(o = {}) {
+  const k = 'r' + JSON.stringify(o); if (facadeCache[k]) return facadeCache[k];
+  const m = interiorize(new THREE.MeshStandardMaterial({ color: 0xffffff, envMapIntensity: 1.3 }), o); m.userData.glass = true; return (facadeCache[k] = m);
+}
 export function glassMat(opts = {}) {
   const k = 'g' + JSON.stringify(opts); if (facadeCache[k]) return facadeCache[k];
-  return (facadeCache[k] = new THREE.MeshStandardMaterial({ map: TX.glassFacade(opts), metalness: 0.55, roughness: 0.12, envMapIntensity: 1.3 }));
+  const { tint, mullion, seed = 1, spandrel = true, bayW = 1.6, floorH = 4, warm = 0.35 } = opts;
+  return (facadeCache[k] = roomGlass({ cell: [bayW, floorH], tint, mullion, seed, spandrel, warm, frame: 0.05 }));
 }
+// panel / masonry facades: a PBR wall; the windows are real 3D units (surrounds, sills, recessed room-glass) added by mass()
 export function panelMat(opts = {}) {
   const k = 'p' + JSON.stringify(opts); if (facadeCache[k]) return facadeCache[k];
-  return (facadeCache[k] = new THREE.MeshStandardMaterial({ map: TX.panelFacade(opts), metalness: 0.05, roughness: 0.7 }));
+  const c = new THREE.Color(opts.wall || '#e9e6df'), hsl = {}; c.getHSL(hsl);
+  const brick = hsl.l < 0.45 && hsl.h < 0.12, ribbon = (opts.kind || 'ribbon') === 'ribbon';
+  const tex = brick ? TX.pbr(hsl.l < 0.3 ? 'brown_brick_02' : 'red_brick_03', 2.2) : ribbon ? TX.pbr('brushed_concrete', 3) : TX.pbr('concrete_tile_facade', 3.5);
+  const col = brick ? new THREE.Color(1, 1, 1).lerp(c.clone().multiplyScalar(1.8), 0.25) : c.clone().multiplyScalar(1.04);
+  const m = new THREE.MeshStandardMaterial({ ...tex, color: col, roughness: 0.88, metalness: 0 });
+  m.userData.panel = { ...opts, brick }; return (facadeCache[k] = m);
+}
+// plane with metre UVs facing +z (for window glass)
+function upl(w, h) { const g = new THREE.PlaneGeometry(w, h); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w, uv.getY(i) * h); return g; }
+// Build queued window units once every sign and entrance is known, so windows never cut through them
+export function flushFacades(ctx) {
+  const jobs = ctx._facadeJobs || []; ctx._facadeJobs = [];
+  const open = ctx._openings || [];
+  const blocked = (face, wx, wz, ya, yb, hw) => open.some(o => o.face === face && o.y0 < yb && o.y1 > ya &&
+    (FACE[face][1] ? Math.abs(wz - o.z) < 1.2 && Math.abs(wx - o.x) < hw + o.hw : Math.abs(wx - o.x) < 1.2 && Math.abs(wz - o.z) < hw + o.hw));
+  for (const j of jobs) {
+    const { x, z, w, d, y0, h, o, baseTop } = j, b = { x, z, w, d }, top = y0 + h;
+    const bw = o.bayW || 2.5, fh = o.floorH || 4, ribbon = (o.kind || 'ribbon') === 'ribbon';
+    const surround = o.brick ? M('limestoneTrim') : M('trimWhite'), dark = M('metalDark');
+    for (const face of ['s', 'n', 'e', 'w']) {
+      const along = FACE[face][1] ? w : d, ry = FACE[face][2];
+      const put = (geo, mat, t, y, out) => { const [px, pz] = onFace(b, face, t, out); ctx.geo(geo, mat, mat4(px, y, pz, ry), !mat.userData.glass); };
+      for (let fy = y0; fy + fh * 0.75 <= top - 0.2; fy += fh) {
+        const wh = fh * 0.5, wy = fy + fh * 0.5; if (wy - wh / 2 < baseTop + 0.25) continue;
+        if (ribbon) {
+          const L = along - 0.8; if (L < 2) continue;
+          if (blocked(face, ...onFace(b, face, 0, 0), wy - wh / 2, wy + wh / 2, L / 2)) {
+            // a sign crosses this band: fall back to separate bays left and right of it
+          } else {
+            put(upl(L, wh), roomGlass({ cell: [bw, wh], tint: o.glass || [80, 110, 140], seed: o.seed || 2, spandrel: false, frame: 0, mullion: '#2a3340' }), 0, wy, 0.02);
+            put(ubox(L + 0.3, 0.16, 0.22), surround, 0, wy + wh / 2 + 0.08, 0.11); put(ubox(L + 0.3, 0.14, 0.3), surround, 0, wy - wh / 2 - 0.07, 0.15);
+            for (let t = -L / 2; t <= L / 2 + 0.01; t += bw / 2) put(ubox(0.07, wh, 0.1), dark, t, wy, 0.05);
+            continue;
+          }
+        }
+        const n = Math.max(1, Math.floor(along / bw)), m0 = (along - n * bw) / 2, ww = ribbon ? bw * 0.8 : bw * 0.56;
+        for (let i = 0; i < n; i++) {
+          const t = -along / 2 + m0 + bw * (i + 0.5), [wx, wz] = onFace(b, face, t, 0);
+          if (blocked(face, wx, wz, wy - wh / 2 - 0.3, wy + wh / 2 + 0.3, ww / 2 + 0.25)) continue;
+          put(upl(ww, wh), roomGlass({ cell: [ww, wh], tint: o.glass || [80, 110, 140], seed: o.seed || 2, spandrel: false, frame: 0.045, mullion: '#2b2e33' }), t, wy, 0.02);
+          put(ubox(0.12, wh + 0.26, 0.16), surround, t - ww / 2 - 0.06, wy, 0.08); put(ubox(0.12, wh + 0.26, 0.16), surround, t + ww / 2 + 0.06, wy, 0.08);
+          put(ubox(ww + 0.36, 0.18, 0.2), surround, t, wy + wh / 2 + 0.09, 0.1); put(ubox(ww + 0.44, 0.1, 0.3), surround, t, wy - wh / 2 - 0.05, 0.15);
+          if (wh > 1.4) put(ubox(ww, 0.05, 0.05), dark, t, wy + wh * 0.18, 0.04); // transom bar
+        }
+      }
+    }
+  }
 }
 export function signMat(text, o = {}) {
   const k = 's' + text + JSON.stringify(o); if (facadeCache[k]) return facadeCache[k];
@@ -176,7 +296,9 @@ export function sign(ctx, text, x, y, z, ry, height = 1.2, o = {}) {
   return w;
 }
 export function faceSign(ctx, b, face, text, y, height, o = {}) {
-  const [x, z] = onFace(b, face, o.t || 0, 0.09); sign(ctx, text, x, y, z, FACE[face][2], height, o);
+  const [x, z] = onFace(b, face, o.t || 0, 0.09); const sw = sign(ctx, text, x, y, z, FACE[face][2], height, o);
+  const op = (ctx._openings = ctx._openings || []); op.push({ face, x, z, y0: y - height / 2 - 0.2, y1: y + height / 2 + 0.2, hw: sw / 2 + 0.2 });
+  if (o.door !== false && y <= 16) op.push({ face, x, z, y0: 0, y1: 3.6, hw: 2.3 });
   if (o.door === false || y > 16) return;
   // entrance: framed glass doors + a cantilevered canopy on the signed face
   const ry = FACE[face][2], [dx, dz] = onFace(b, face, o.t || 0, 0.12), [cx, cz] = onFace(b, face, o.t || 0, 0.95);
@@ -191,6 +313,8 @@ export function faceSign(ctx, b, face, text, y, height, o = {}) {
 // Generic massing block with collider + roof details.
 export function mass(ctx, { x, z, w, d, y0 = 0, h, mat, roofMat = M('roof'), parapet = 0.9, units = true, collide = true, seed = 1, grid = null, base = null }) {
   ctx.box(x, y0, z, w, h, d, mat, { vOff: y0 });
+  const wantBase = base ?? (y0 === 0 && h >= 8 && w >= 8 && d >= 8);
+  if (mat.userData && mat.userData.panel) (ctx._facadeJobs = ctx._facadeJobs || []).push({ x, z, w, d, y0, h, o: mat.userData.panel, baseTop: wantBase ? 4.7 : y0 });
   if (collide && y0 < 2.5) ctx.collider(x - w / 2, x + w / 2, z - d / 2, z + d / 2, y0, y0 + h);
   const top = y0 + h;
   ctx.box(x, top, z, w - 0.1, 0.05, d - 0.1, roofMat, { shadow: false });
@@ -219,7 +343,6 @@ export function mass(ctx, { x, z, w, d, y0 = 0, h, mat, roofMat = M('roof'), par
     }
   }
   // ground-floor storefront: stone plinth, tall dark glazing, transom band
-  const wantBase = base ?? (y0 === 0 && h >= 8 && w >= 8 && d >= 8);
   if (wantBase) {
     ctx.box(x, 0, z, w + 0.16, 0.55, d + 0.16, M('concrete'));
     ctx.box(x, 0.55, z, w + 0.1, 3.9, d + 0.1, glassMat({ tint: [40, 52, 64], bays: 2, floors: 1, bayW: 2.4, floorH: 3.9, seed: 99, warm: 0.6, spandrel: false, mullion: '#1a1d22' }), { vOff: 0 });

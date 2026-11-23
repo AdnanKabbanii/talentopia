@@ -1,6 +1,6 @@
 // The ten career districts. Each builds several recognisable buildings and registers one featured, enterable building.
 import * as THREE from 'three';
-import { M, mat4, ubox, ucyl, glassMat, panelMat, signMat, mass, bands, fins, shell, classical, factory, hangar, dome, sign, faceSign, FACE, onFace,
+import { M, mat4, ubox, ucyl, glassMat, panelMat, flushFacades, signMat, mass, bands, fins, shell, classical, factory, hangar, dome, sign, faceSign, FACE, onFace,
   treeAt, lampAt, benchAt, planterAt, umbrellaTable, solarRow, busStop, turbine, crane, makeCar } from './kit.js';
 import { blockBase, BLOCK } from './city.js';
 import { billboard, boardTex } from './textures.js';
@@ -341,6 +341,7 @@ export function buildDistricts(ctx) {
   const builders = { med: medcity, capital, creative, forge, nexus, taste, planet, civic, market, sky };
   for (const d of DISTRICTS) { ctx._footColor = '#cfc9bd'; builders[d.id](ctx); }
   landscape(ctx);
+  flushFacades(ctx); // real 3D windows on panel / brick buildings, placed around every sign and entrance
 }
 
 // Fill leftover open ground in each block with landscaped lawns, trees, hedges and benches,
