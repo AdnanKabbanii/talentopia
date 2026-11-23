@@ -163,6 +163,77 @@ function skinize(m) {
   };
   m.customProgramCacheKey = () => 'skin-wrap'; m.needsUpdate = true;
 }
+// ---------------------------------------------------------------- realistic hair
+// The MPFB hair cards ship with 256px textures, which reads as a smooth helmet. Three fixes, all in the shader:
+// 1) a tiling strand texture (strands run along V) adds fine per-strand brightness and clumping,
+// 2) Kajiya-Kay style double highlight along the strands (a white primary and a hair-coloured secondary, shifted per strand)
+//    replaces the plastic GGX blob, 3) inner layers are darkened by a baked "shell depth" occlusion, which gives volume.
+let strandT = null;
+function strandTex() {
+  if (strandT) return strandT;
+  const W = 512, H = 128, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'), im = g.createImageData(W, H);
+  let seed = 11; const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const wave = (n) => { const a = []; for (let k = 0; k < n; k++) a.push([1 + (r() * 40 | 0), r() * 6.283, 0.3 + r() * 0.7]); return x => a.reduce((s, [f, p, w]) => s + Math.sin(x * 6.283 * f + p) * w, 0) / n; };
+  const clump = wave(6), shift = wave(4); const b = new Float32Array(W), k = new Uint8Array(W), ph = new Float32Array(W);
+  const sh = new Float32Array(W); for (let x = 0; x < W; x++) { b[x] = 0.25 + 0.75 * Math.pow(r(), 0.6); k[x] = 1 + (r() * 3 | 0); ph[x] = r() * 6.283; sh[x] = r() * 2 - 1; }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const o = (y * W + x) * 4, u = x / W;
+    const v = b[x] * (0.85 + 0.35 * clump(u)) * (0.96 + 0.04 * Math.sin(y / H * 6.283 * k[x] + ph[x]));
+    im.data[o] = Math.max(0, Math.min(255, v * 255)); im.data[o + 1] = (0.5 + 0.32 * sh[x] + 0.18 * shift(u)) * 255; im.data[o + 2] = 255; im.data[o + 3] = 255; }
+  g.putImageData(im, 0, 0); strandT = new THREE.CanvasTexture(c); strandT.wrapS = strandT.wrapT = THREE.RepeatWrapping; strandT.anisotropy = 8; strandT.colorSpace = THREE.NoColorSpace;
+  return strandT;
+}
+function hairOcclusion(geo, c) { // 1 on the outer shell of the hair, falling to 0 a few cm inside (bind pose, mesh space)
+  const p = geo.attributes.position, n = p.count, PI = Math.PI, NB = 44, key = new Array(n), rad = new Float32Array(n), mx = new Map();
+  for (let i = 0; i < n; i++) { const x = p.getX(i) - c.x, y = p.getY(i) - c.y, z = p.getZ(i) - c.z, az = Math.floor((Math.atan2(z, x) + PI) / (2 * PI) * NB);
+    let k, R; if (y > 0) { R = Math.hypot(x, y, z); k = 's' + az + '_' + Math.floor(Math.asin(Math.min(1, y / R)) / (PI / 2) * 14); } else { R = Math.hypot(x, z); k = 'c' + az + '_' + Math.floor(y / 0.022); }
+    key[i] = k; rad[i] = R; if (!(mx.get(k) >= R)) mx.set(k, R); }
+  const ao = new Float32Array(n); for (let i = 0; i < n; i++) ao[i] = Math.max(0, Math.min(1, 1 - (mx.get(key[i]) - rad[i]) / 0.03));
+  geo.setAttribute('hairAO', new THREE.BufferAttribute(ao, 1));
+}
+let flatN = null;
+function flatNormal() { if (!flatN) { flatN = new THREE.DataTexture(new Uint8Array([128, 128, 255, 255]), 1, 1); flatN.needsUpdate = true; } return flatN; }
+function hairize(m, curly) { // curly hair (afro) keeps its own texture: no straight streaks, a soft matte sheen instead of strand highlights
+  const SPEC = 'reflectedLight.directSpecular += irradiance * BRDF_GGX( directLight.direction, geometryViewDir, geometryNormal, material );';
+  const DIFF = 'reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
+  m.sheen = 0.2; m.roughness = 0.62; m.envMapIntensity = 0.15; m.specularIntensity = 0.35;
+  if (!m.normalMap) m.normalMap = flatNormal(); // a flat normal map switches on three's skinned tangent frame, which the strand highlight follows
+  m.onBeforeCompile = sh => {
+    const chunk = THREE.ShaderChunk.lights_physical_pars_fragment; if (!chunk.includes(SPEC) || !chunk.includes(DIFF)) return;
+    sh.uniforms.strandMap = { value: strandTex() };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float hairAO;\nvarying float vHairAO;\nvarying vec2 vHairUv;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvHairAO = hairAO; vHairUv = uv;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D strandMap;\nvarying float vHairAO;\nvarying vec2 vHairUv;\nvec3 hairT; float hairS; float hairO;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        vec4 hs = texture2D( strandMap, vHairUv * vec2( 9.0, 1.0 ) ); hairS = hs.g - 0.5; hairO = vHairAO;
+        #ifdef HAIR_CURLY
+          diffuseColor.rgb *= mix( 0.58, 1.0, vHairAO ); hairS = 0.0;
+        #else
+          diffuseColor.rgb *= ( 0.6 + 0.6 * hs.r ) * mix( 0.58, 1.0, vHairAO );
+          diffuseColor.a *= 0.55 + 0.75 * hs.r; // ragged, strand-by-strand edges instead of a clean cut-out line
+        #endif`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        #ifdef USE_TANGENT
+          { vec3 B = tbn[ 1 ]; B -= normal * dot( B, normal ); hairT = normalize( B + vec3( 1e-6 ) ); } // smooth, skinned strand direction (along V)
+        #else
+          { vec3 dp1 = dFdx( -vViewPosition ), dp2 = dFdy( -vViewPosition ); vec2 du1 = dFdx( vHairUv ), du2 = dFdy( vHairUv );
+            vec3 B = dp1 * du2.x - dp2 * du1.x; B -= normal * dot( B, normal ); hairT = normalize( B + vec3( 1e-6 ) ); }
+        #endif`)
+      .replace('#include <lights_physical_pars_fragment>', chunk.replace(SPEC, `{
+          vec3 H = normalize( directLight.direction + geometryViewDir );
+          vec3 t1 = normalize( hairT + geometryNormal * ( hairS * 0.35 + 0.08 ) ), t2 = normalize( hairT + geometryNormal * ( hairS * 0.35 - 0.16 ) );
+          float c1 = dot( t1, H ), c2 = dot( t2, H );
+          float s1 = pow( sqrt( max( 0.0, 1.0 - c1 * c1 ) ), 160.0 ), s2 = pow( sqrt( max( 0.0, 1.0 - c2 * c2 ) ), 26.0 );
+          float att = smoothstep( -0.15, 0.5, dot( geometryNormal, directLight.direction ) ) * ( 0.25 + 0.75 * hairO );
+          #ifdef HAIR_CURLY
+            reflectedLight.directSpecular += irradiance * BRDF_GGX( directLight.direction, geometryViewDir, geometryNormal, material ) * 0.25;
+          #else
+            reflectedLight.directSpecular += directLight.color * att * ( vec3( 0.2 ) * s1 + material.diffuseColor * ( 0.9 + 1.4 * max( hairS, 0.0 ) ) * s2 * 0.35 );
+          #endif
+        }`).replace(DIFF, `reflectedLight.directDiffuse += directLight.color * clamp( ( dot( geometryNormal, directLight.direction ) + 0.3 ) / 1.3, 0.0, 1.0 ) * BRDF_Lambert( material.diffuseColor );`));
+  };
+  if (curly) { m.defines = { ...(m.defines || {}), HAIR_CURLY: '' }; m.roughness = 0.85; m.sheen = 0.35; }
+  m.customProgramCacheKey = () => curly ? 'hair-kk-curly' : 'hair-kk'; m.needsUpdate = true;
+}
 function grayMap(tex) { // hair/brow texture -> normalised greyscale (keeps alpha) so material colour controls the hue
   const img = tex.image; const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
   const d = g.getImageData(0, 0, c.width, c.height), p = d.data; const ls = [];
@@ -239,7 +310,13 @@ export class AvatarModel {
         const bones = s0.skeleton.bones.map(b => this.bones[b.name] || b);
         s.bind(new THREE.Skeleton(bones, s0.skeleton.boneInverses), s0.bindMatrix);
         s.name = kind + '__' + id; prepMaterial(s); this.body.parent.add(s); list.push(s);
-        if (kind === 'hair') for (const m of [].concat(s.material)) if (m.map) m.map = grayCached(m.map);
+        if (kind === 'hair') {
+          if (!s0.geometry.attributes.hairAO) { const sk = s0.skeleton, hi = sk.bones.findIndex(b => b.name === 'head');
+            const c = hi < 0 ? new THREE.Box3().setFromBufferAttribute(s0.geometry.attributes.position).getCenter(new THREE.Vector3())
+              : new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(sk.boneInverses[hi]).invert()).add(new THREE.Vector3(0, 0.09, 0)).applyMatrix4(s0.bindMatrixInverse);
+            hairOcclusion(s0.geometry, c); if (s0.geometry.index && s0.geometry.attributes.normal && s0.geometry.attributes.uv && !s0.geometry.attributes.tangent) s0.geometry.computeTangents(); }
+          for (const m of [].concat(s.material)) { if (m.map) m.map = grayCached(m.map); hairize(m, /afro/.test(id)); }
+        }
         if (info.style === 'talentopia') for (const m of [].concat(s.material)) { if (m.map && m.map.image) m.map = navyMap(m.map); m.emissive = new THREE.Color(0x9d84ff); m.emissiveMap = pipingTex(s.geometry); m.emissiveIntensity = 1.7; m.roughness = 0.55; m.metalness = 0.04; m.needsUpdate = true; }
       }
       this.partMeshes[key] = list; return list;
