@@ -22,7 +22,9 @@ function augmentCatalog(cat) {
   const tf = cat.parts.outfit.find(p => p.id === 'talentopia_f'), ms = cat.parts.outfit.find(p => p.id === 'male_elegantsuit01');
   if (tf && ms) { tf.compose = [{ file: tf.file, keep: 'upper', bit: cat.hideBits.female_elegantsuit01 }, { file: ms.file, keep: 'lower', bit: cat.hideBits.male_elegantsuit01 }]; tf.label = 'Talentopia · tailored cut'; }
   // V4 Signature look (approved character concept): iridescent lilac jacket with light piping over pearl trousers
-  if (tf && tf.compose) { cat.parts.outfit.unshift({ ...tf, id: 'signature_f', label: 'Signature · iridescent', style: 'signature', compose: tf.compose.map(c => ({ ...c })) }); cat.hideBits.signature_f = cat.hideBits.talentopia_f; }
+  // modelled in Blender on the avatar body (blender/signature_outfit.py): cropped jacket with stand collar and light piping, wide cargo trousers, belt
+  cat.parts.outfit.unshift({ id: 'signature_f', label: 'Signature · iridescent', file: 'parts/outfit_signature01.glb', mesh: 'outfit__signature01', style: 'signature2',
+    hideCompose: [{ bit: cat.hideBits.female_elegantsuit01 }, { bit: cat.hideBits.male_elegantsuit01 }] });
   const pt = cat.parts.hair.find(p => p.id === 'ponytail01'); if (pt) cat.parts.hair.splice(cat.parts.hair.indexOf(pt) + 1, 0, { ...pt, id: 'bun01', label: 'Messy bun', bun: true });
   return cat;
 }
@@ -32,6 +34,18 @@ function pearlMap(tex, rgb, lo, hi) { const k0 = tex.uuid + rgb.join(); let t = 
   const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
   for (let i = 0; i < p.length; i += 4) { const l = (0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2]) / 255, k = Math.min(1.08, lo + hi * l); p[i] = Math.min(255, rgb[0] * k); p[i + 1] = Math.min(255, rgb[1] * k); p[i + 2] = Math.min(255, rgb[2] * k); }
   g.putImageData(d, 0, 0); t = new THREE.CanvasTexture(c); t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return (pearlCache[k0] = t); }
+function signature2Mat(m) { // materials of the Blender-built Signature outfit, by name
+  const n = m.name || '', c = col => new THREE.Color(col);
+  let out;
+  if (n === 'SigJacket') out = new THREE.MeshPhysicalMaterial({ color: c(0xb3a0e8), roughness: 0.36, metalness: 0.12, iridescence: 0.9, iridescenceIOR: 1.33, iridescenceThicknessRange: [200, 520],
+    sheen: 0.25, sheenColor: c(0xc9b6ff), sheenRoughness: 0.45, clearcoat: 0.25, clearcoatRoughness: 0.3, envMapIntensity: 1.2 });
+  else if (n === 'SigLight') out = new THREE.MeshStandardMaterial({ color: c(0xffffff), emissive: c(0xf4efff), emissiveIntensity: 2.4, roughness: 0.3 });
+  else if (n === 'SigTrousers' || n === 'SigFlap') out = new THREE.MeshPhysicalMaterial({ color: c(n === 'SigFlap' ? 0xe2dde9 : 0xece8f0), roughness: 0.55, sheen: 0.35, sheenColor: c(0xffffff), sheenRoughness: 0.5, side: THREE.DoubleSide, envMapIntensity: 1.1 });
+  else if (n === 'SigBelt') out = new THREE.MeshPhysicalMaterial({ color: c(0xeee8de), roughness: 0.42, sheen: 0.4, sheenColor: c(0xffffff), side: THREE.DoubleSide });
+  else if (n === 'SigMetal') out = new THREE.MeshStandardMaterial({ color: c(0xdfe3e9), metalness: 1, roughness: 0.2, envMapIntensity: 1.4 });
+  else return m;
+  out.name = n; out.userData.ownColor = true; return out;
+}
 function signatureMat(m, geo, part) { // part: 'upper' jacket (iridescent lilac, glowing piping) | 'lower' trousers (pearl)
   const jacket = part !== 'lower';
   const n = new THREE.MeshPhysicalMaterial({ map: m.map ? pearlMap(m.map, jacket ? [198, 178, 236] : [238, 235, 242], jacket ? 0.8 : 0.62, jacket ? 0.16 : 0.42) : null,
@@ -46,8 +60,8 @@ function bunGeometry(centre, up, back, side) {
   const parts = [], basis = new THREE.Matrix4().makeBasis(side, up, back);
   const layer = (R, r, tilt, spin, sx = 1) => { const g = new THREE.TorusGeometry(R, r, 10, 40); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getY(i), uv.getX(i) * 3); // strands run around the loop
     g.rotateX(Math.PI / 2 + tilt); g.rotateY(spin); g.scale(sx, 0.78, 1); return g; };
-  parts.push(layer(0.034, 0.019, 0.25, 0.3), layer(0.026, 0.017, -0.35, 1.4, 1.1), layer(0.02, 0.016, 0.6, 2.4, 0.9));
-  const core = new THREE.SphereGeometry(0.03, 16, 12); core.scale(1.05, 0.85, 1); parts.push(core);
+  parts.push(layer(0.03, 0.021, 0.15, 0.3), layer(0.022, 0.018, -0.25, 1.6, 1.05));
+  const core = new THREE.SphereGeometry(0.036, 16, 12); core.scale(1.1, 0.8, 1); parts.push(core);
   for (const g of parts) { g.applyMatrix4(basis); g.translate(centre.x, centre.y, centre.z); }
   return mergeGeometries(parts, false);
 }
@@ -354,6 +368,7 @@ export class AvatarModel {
             hairOcclusion(s0.geometry, c); if (s0.geometry.index && s0.geometry.attributes.normal && s0.geometry.attributes.uv && !s0.geometry.attributes.tangent) s0.geometry.computeTangents(); }
           for (const m of [].concat(s.material)) { if (m.map) m.map = grayCached(m.map); hairize(m, /afro/.test(id)); }
         }
+        if (info.style === 'signature2') s.material = [].concat(s.material).length > 1 ? [].concat(s.material).map(signature2Mat) : signature2Mat(s.material);
         if (info.style === 'signature') s.material = [].concat(s.material).length > 1 ? [].concat(s.material).map(m => signatureMat(m, s.geometry, keep)) : signatureMat(s.material, s.geometry, keep);
         if (kind === 'hair' && info.bun) this.makeBun(s, s0, list);
         if (info.style === 'talentopia') for (const m of [].concat(s.material)) { if (m.map && m.map.image) m.map = navyMap(m.map); m.emissive = new THREE.Color(0x9d84ff); m.emissiveMap = pipingTex(s.geometry); m.emissiveIntensity = 1.7; m.roughness = 0.55; m.metalness = 0.04; m.needsUpdate = true; }
@@ -393,7 +408,7 @@ export class AvatarModel {
   applyHide() { // hide body triangles fully covered by the chosen outfit + shoes
     const bits = this.catalog.hideBits; const info = this.catalog.parts.outfit.find(p => p.id === this.cfg.outfit);
     const shoeMask = (bits[this.cfg.shoes] ?? -1) >= 0 ? 1 << bits[this.cfg.shoes] : 0;
-    if (info && info.compose) return this.applyHideCompose(info, shoeMask);
+    if (info && (info.compose || info.hideCompose)) return this.applyHideCompose(info.hideCompose ? { compose: info.hideCompose } : info, shoeMask);
     const mask = ((bits[this.cfg.outfit] ?? -1) >= 0 ? 1 << bits[this.cfg.outfit] : 0) | shoeMask;
     if (!this.hideAttr || !mask) { this.body.geometry = this.srcGeo; return; }
     let g = shared.geo[mask];
@@ -426,7 +441,7 @@ export class AvatarModel {
       const [k] = key.split(':');
       for (const m of this.partMeshes[key]) for (const mt of [].concat(m.material)) {
         if (k === 'hair') mt.color.copy(hairC).multiplyScalar(1.15);
-        if (k === 'outfit') mt.color.set(c.outfitTint);
+        if (k === 'outfit' && !mt.userData.ownColor) mt.color.set(c.outfitTint);
         if (k === 'shoes' && mt.map) { if (!mt.userData.map0) mt.userData.map0 = mt.map; const want = c.shoesTint ? pearlMap(mt.userData.map0, [246, 244, 250], 0.62, 0.42) : mt.userData.map0; if (mt.map !== want) { mt.map = want; mt.needsUpdate = true; } }
       }
     }
