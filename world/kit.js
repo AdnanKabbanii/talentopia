@@ -74,6 +74,8 @@ export function initMaterials(envIntensity = 1) {
   mats.meadow = std({ map: TX.meadowTex(), roughness: 1 });
   mats.marble = std({ ...P('marble_tiles', 2.5), roughness: 0.25 });
   mats.parquet = std({ ...P('herringbone_parquet', 2.5), roughness: 0.55 });
+  { const t = new THREE.TextureLoader().load('assets/tex/terrazzo.jpg'); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / 2.5, 1 / 2.5); t.anisotropy = 8;
+    mats.terrazzo = std({ map: t, roughness: 0.3, envMapIntensity: 1.1 }); } // user-provided seamless terrazzo (2.5 m tile)
   mats.concrete = std({ ...P('brushed_concrete', 4), color: 0xcfcac2, roughness: 0.8 });
   mats.curb = std({ color: 0xbdb8b0, roughness: 0.8 });
   mats.roadLines = std({ map: TX.roadMarkings(), transparent: true, roughness: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
@@ -365,7 +367,7 @@ export function fins(ctx, b, face, { y0 = 0, h, step = 1.6, depth = 0.6, th = 0.
 export function shell(ctx, { x, z, w, d, face = 's', gfH = 5, doorW = 3.2, wallMat = M('white'), floorMat = M('marble'), frontMat = null, name = '' }) {
   const t = 0.3, [fx, fz, ry] = FACE[face];
   const walls = { n: [x, z - d / 2 + t / 2, w, t], s: [x, z + d / 2 - t / 2, w, t], w: [x - w / 2 + t / 2, z, t, d], e: [x + w / 2 - t / 2, z, t, d] };
-  ctx.box(x, 0, z, w - 0.2, 0.15, d - 0.2, floorMat, { shadow: false });
+  ctx.box(x, 0, z, w - 0.2, 0.162, d - 0.2, floorMat, { shadow: false }); // 12 mm above the block paving (coplanar tops flickered)
   ctx.floor(x - w / 2 + t, x + w / 2 - t, z - d / 2 + t, z + d / 2 - t, 0.15);
   ctx.box(x, gfH - 0.25, z, w, 0.25, d, M('offwhite'));                      // ceiling slab
   // ceiling light panels

@@ -214,7 +214,7 @@ function taste(ctx) {
 function market(ctx) {
   blockBase(ctx, 0, 130, M('plaza'));
   featuredBuilding(ctx, { id: 'store', name: 'Market Hall Store', district: 'market', x: 0, z: 90, w: 30, d: 20, face: 'n', gfH: 5.5,
-    wallMat: M('offwhite'), floorMat: M('concrete'), signText: 'MARKET HALL · Retail & Business', signOpts: { accent: '#FFCCAB' },
+    wallMat: M('offwhite'), floorMat: M('terrazzo'), signText: 'MARKET HALL · Retail & Business', signOpts: { accent: '#FFCCAB' },
     upper: (y) => { mass(ctx, { x: 0, z: 90, w: 30, d: 20, y0: y, h: 5, mat: glassMat({ tint: [110, 105, 95], seed: 91 }), collide: false });
       ctx.box(0, y - 0.6, 79.2, 26, 0.12, 2.4, M('orange')); } });
   const shops = [[-42, 'Bloom Florist', '#c8507a', '#fdf1f5'], [-24, 'Urban Goods', '#3a4a5c', '#eef0f2'], [24, 'Tech Corner', '#2563c9', '#eef4ff'], [42, 'Book Nook', '#7a4b2a', '#fbf4ea']];

@@ -45,6 +45,8 @@ export function experienceInfo(id, d) { // → { building, district, title, skil
   const title = act ? act.title : id === 'med_heart' ? 'Heart anatomy challenge' : `${f.name || 'Workplace'} mission`;
   return { building, f, dist, title, skills: SKILLS[id] || [], xp: XP(id) };
 }
+const DIC = new Set(['med', 'capital', 'creative', 'forge', 'nexus', 'taste', 'planet', 'civic', 'market', 'sky']);
+const dIcon = x => x && DIC.has(x.id) ? `<img class="d-ic" src="assets/districts/${x.id}.webp" alt="">` : (x && x.icon) || '◆';
 // workplace badge art (user-provided, assets/badges/<building>.webp)
 const BADGES = new Set(['hospital', 'bank', 'agency', 'engineering', 'software', 'kitchen', 'store', 'court', 'research', 'terminal']);
 export const badgeSrc = b => BADGES.has(b) ? `assets/badges/${b}.webp` : null;
@@ -73,7 +75,7 @@ export function openPassport(d, tab = 'journey') {
   if (tab === 'careers') { const saved = P.saved || {};
     body = `<div class="pp-careers">${d.DISTRICTS.map(x => { const fs = d.FEATURED.filter(f => f.district === x.id); const done = fs.some(f => explored.has(f.id)), seen = fs.some(f => visited[f.id]);
       const st = done ? 'Explored' : seen ? 'Visited' : 'Not explored yet'; const sv = fs.filter(f => saved[f.id]);
-      return `<div class="pp-cr ${done ? 'done' : seen ? 'seen' : ''}" style="--c:${x.color}"><i>${x.icon}</i><span><b>${esc(x.name)}</b><em>${esc(x.short)} · ${st}${sv.length ? ' · ♥ saved' : ''}</em></span>${fs[0] ? `<button class="btn-glass" data-go="${fs[0].id}">Go</button>` : ''}</div>`; }).join('')}</div>`; }
+      return `<div class="pp-cr ${done ? 'done' : seen ? 'seen' : ''}" style="--c:${x.color}"><i>${dIcon(x)}</i><span><b>${esc(x.name)}</b><em>${esc(x.short)} · ${st}${sv.length ? ' · ♥ saved' : ''}</em></span>${fs[0] ? `<button class="btn-glass" data-go="${fs[0].id}">Go</button>` : ''}</div>`; }).join('')}</div>`; }
   if (tab === 'learning') body = learningHTML(d);
   const el = openPanel(`${head}<div class="pp-tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === tab}" class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div><div class="pp-body">${body}</div>
     <p class="pp-foot">Discovery badges from educational simulations, not qualifications. Saved on this device only.</p>`, { cls: 'pn-passport', label: 'Career Passport', onClose: d.onClose });

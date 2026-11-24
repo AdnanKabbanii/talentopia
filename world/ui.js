@@ -166,7 +166,7 @@ export function createUI({ progress, store, onTravel }) {
     const g = c.getContext('2d'); g.scale(devicePixelRatio, devicePixelRatio); const T = W2M(r.width, r.height); mapState = { data, T };
     drawCity(g, T, data, { labels: true });
     $('mapList').innerHTML = `<h3>City map</h3><div class="note" style="margin-bottom:6px">Click a district or a ★ pin to travel to its featured building. You keep your avatar and progress.</div>` +
-      data.districts.map(d => { const f = data.featured.find(x => x.district === d.id); return `<button class="d" data-f="${f ? f.id : ''}"><i style="background:${d.color}">${d.icon}</i><span>${esc(d.name)}<small>${f ? esc(f.name) : esc(d.short)}${progress.flags && progress.flags['m_' + (f ? f.id : '')] ? ' · ✓ done' : ''}</small></span></button>`; }).join('') +
+      data.districts.map(d => { const f = data.featured.find(x => x.district === d.id); return `<button class="d" data-f="${f ? f.id : ''}"><i style="background:${d.color}">${['med','capital','creative','forge','nexus','taste','planet','civic','market','sky'].includes(d.id) ? `<img class="d-ic" src="assets/districts/${d.id}.webp" alt="">` : d.icon}</i><span>${esc(d.name)}<small>${f ? esc(f.name) : esc(d.short)}${progress.flags && progress.flags['m_' + (f ? f.id : '')] ? ' · ✓ done' : ''}</small></span></button>`; }).join('') +
       `<button class="secondary" id="mapClose" style="margin-top:8px">Close map (M)</button>`;
     $('mapList').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { const f = data.featured.find(x => x.id === b.dataset.f); if (f) onTravel(f); });
     $('mapClose').onclick = api.closeMap;

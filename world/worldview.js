@@ -2,6 +2,11 @@
 // Levels: whole city → district → building → back to street level with your avatar.
 // Touch: one-finger drag pans, pinch zooms, tap selects, double-tap focuses. Mouse: drag pans, wheel zooms, Shift/right-drag rotates.
 import * as THREE from 'three';
+// district icon / gateway art (user-provided): assets/districts/<id>.webp and <id>_hero.jpg
+const DIC = new Set(['med', 'capital', 'creative', 'forge', 'nexus', 'taste', 'planet', 'civic', 'market', 'sky']), DHERO = new Set(['med']);
+const dIcon = x => x && DIC.has(x.id) ? `<img class="d-ic" src="assets/districts/${x.id}.webp" alt="">` : (x && x.icon) || '◆';
+const dHero = x => x && DHERO.has(x.id) ? `<div class="sh-hero" style="background-image:url(assets/districts/${x.id}_hero.jpg)"></div>` : '';
+
 
 const CITY_C = new THREE.Vector3(46, 0, 0), CITY_W = 760, CITY_D = 420;
 const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -80,7 +85,7 @@ export class WorldView {
   // ------------------------------------------------------------ labels (HTML, projected from 3D)
   renderLabels() {
     const D = this.d.DISTRICTS;
-    this.labels.innerHTML = D.map(x => `<button class="wv-lbl" data-d="${x.id}" style="--c:${x.color}"><i>${x.icon}</i><span><b>${esc(x.name)}</b><em>${esc(x.short)}</em></span></button>`).join('') + `<div class="wv-me" id="wvMe"><span>You</span></div>` +
+    this.labels.innerHTML = D.map(x => `<button class="wv-lbl" data-d="${x.id}" style="--c:${x.color}"><i>${dIcon(x)}</i><span><b>${esc(x.name)}</b><em>${esc(x.short)}</em></span></button>`).join('') + `<div class="wv-me" id="wvMe"><span>You</span></div>` +
       this.d.FEATURED().map(f => `<button class="wv-bld" data-f="${f.id}" style="--c:${(D.find(x => x.id === f.district) || {}).color || '#8D70FF'}"><i></i><span>${esc(f.name)}</span></button>`).join('');
     this.labels.querySelectorAll('[data-d]').forEach(b => b.onclick = e => { e.stopPropagation(); this.focusDistrict(b.dataset.d); });
     this.labels.querySelectorAll('[data-f]').forEach(b => b.onclick = e => { e.stopPropagation(); this.focusBuilding(b.dataset.f); });
@@ -113,7 +118,7 @@ export class WorldView {
     const [w, h] = this.span(x1 - x0 + 30, (z1 - z0) * 1.3); const yaw = this.portrait ? Math.PI / 2 : 0;
     this.flyTo({ tx: (x0 + x1) / 2 + (this.portrait ? 25 : 0), tz: (z0 + z1) / 2 + (this.portrait ? 0 : 20), dist: this.fitDist(...this.span(x1 - x0 + 30, (z1 - z0) * 1.3, yaw)), yaw, pitch: 0.92 }, 1.1);
     const blds = this.d.FEATURED().filter(f => f.district === id);
-    this.openSheet(`<div class="sh-head"><span class="sh-ic" style="--c:${x.color}">${x.icon}</span><div><b>${esc(x.name)}</b><em>${esc(x.short)}</em></div></div>
+    this.openSheet(`${dHero(x)}<div class="sh-head"><span class="sh-ic" style="--c:${x.color}">${dIcon(x)}</span><div><b>${esc(x.name)}</b><em>${esc(x.short)}</em></div></div>
       ${blds.length ? blds.map(f => { const c = this.d.CAREERS[f.id]; return `<button class="sh-item" data-f="${f.id}"><span><b>${esc(f.name)}</b><em>${c ? esc(c.roles.slice(0, 3).map(r => r[0]).join(' · ')) : 'Workplace'}</em></span><i>›</i></button>`; }).join('')
         : `<p class="sh-note">Buildings here are not open to visitors yet. Featured workplaces with real interiors are in the other districts.</p>`}
       <div class="sh-row"><button class="btn-glass" data-fit>Whole city</button></div>`, `district:${id}`);
@@ -125,7 +130,7 @@ export class WorldView {
     const cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, e = f.entrance || { x: cx, z: cz };
     this.flyTo({ tx: cx, tz: cz, dist: Math.max(55, Math.max(f.x1 - f.x0, f.z1 - f.z0) * 1.9), yaw: Math.atan2(e.x - cx, e.z - cz), pitch: 0.62 }, 1.1);
     const c = this.d.CAREERS[fid], st = this.d.STATIONS().filter(s => s.building === fid && !/^career/.test(s.id));
-    this.openSheet(`<div class="sh-head"><span class="sh-ic" style="--c:${x.color}">${x.icon || '◆'}</span><div><b>${esc(f.name)}</b><em>${esc(x.name || '')} · ${esc(x.short || '')}</em></div></div>
+    this.openSheet(`<div class="sh-head"><span class="sh-ic" style="--c:${x.color}">${dIcon(x)}</span><div><b>${esc(f.name)}</b><em>${esc(x.name || '')} · ${esc(x.short || '')}</em></div></div>
       ${c ? `<div class="sh-tags">${c.roles.slice(0, 4).map(r => `<span>${esc(r[0])}</span>`).join('')}</div>` : ''}
       <p class="sh-note">${st.length} hands-on experience${st.length === 1 ? '' : 's'} inside: ${esc(st.slice(0, 3).map(s => s.label.split(' · ')[0]).join(', '))}${st.length > 3 ? '…' : ''}</p>
       <div class="sh-row"><button class="btn-glass" data-walk="${fid}">Walk there</button><button class="btn-primary" data-travel="${fid}">Fast travel</button></div>
@@ -161,7 +166,7 @@ export class WorldView {
   }
   results(list, q) {
     const el = document.getElementById('wvResults'); if (!list.length) { el.innerHTML = q ? `<div class="wv-none">No match for “${esc(q)}”. Try doctor, banking, design, chef or engineer.</div>` : ''; el.hidden = !q; return; }
-    el.hidden = false; el.innerHTML = list.map(r => `<button data-f="${r.f.id}"><i style="--c:${r.x.color}">${r.x.icon || '◆'}</i><span><b>${esc(r.why)}</b><em>${esc(r.f.name)} · ${esc(r.x.name || '')}</em></span></button>`).join('');
+    el.hidden = false; el.innerHTML = list.map(r => `<button data-f="${r.f.id}"><i style="--c:${r.x.color}">${dIcon(r.x)}</i><span><b>${esc(r.why)}</b><em>${esc(r.f.name)} · ${esc(r.x.name || '')}</em></span></button>`).join('');
     el.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { el.hidden = true; document.getElementById('wvSearch').blur(); this.focusBuilding(b.dataset.f); });
   }
   // ------------------------------------------------------------ input
@@ -170,7 +175,7 @@ export class WorldView {
     const hit = this.ray.intersectObjects(this.d.ctx.clickMeshes, false)[0];
     if (hit) { const u = hit.object.userData; if (u.featured) return this.focusBuilding(u.featured);
       const x = this.d.DISTRICTS.find(q => q.id === u.district);
-      this.openSheet(`<div class="sh-head"><span class="sh-ic" style="--c:${x ? x.color : '#8D70FF'}">${x ? x.icon : '◆'}</span><div><b>${esc(u.building)}</b><em>${esc(x ? x.name : 'Talentopia')}</em></div></div><p class="sh-note">Not open to visitors yet. Featured workplaces have a glowing name tag.</p>${x ? `<div class="sh-row"><button class="btn-glass" data-back="${x.id}">See ${esc(x.name)}</button></div>` : ''}`, 'bld'); return; }
+      this.openSheet(`<div class="sh-head"><span class="sh-ic" style="--c:${x ? x.color : '#8D70FF'}">${dIcon(x)}</span><div><b>${esc(u.building)}</b><em>${esc(x ? x.name : 'Talentopia')}</em></div></div><p class="sh-note">Not open to visitors yet. Featured workplaces have a glowing name tag.</p>${x ? `<div class="sh-row"><button class="btn-glass" data-back="${x.id}">See ${esc(x.name)}</button></div>` : ''}`, 'bld'); return; }
     const g = this.ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3()); if (!g) return;
     const x = this.d.DISTRICTS.find(q => { const [x0, x1, z0, z1] = q.bounds; return g.x >= x0 && g.x <= x1 && g.z >= z0 && g.z <= z1; });
     if (x && this.level === 'city') this.focusDistrict(x.id);

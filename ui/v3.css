@@ -365,3 +365,8 @@ body.dlg #nav,body.dlg #joy,body.dlg #prompt{opacity:0!important;pointer-events:
 .done-badge{display:block;width:120px;height:120px;margin:-6px auto 4px;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(60,30,140,.35));animation:obIn .45s var(--ease) both}
 .pp-head{padding:14px;border-radius:20px;background:url(../assets/ui/passport_card.webp) center/cover;box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),0 6px 18px rgba(80,50,180,.15)}
 #done .card:has(.done-badge)>div:first-child{display:none}
+/* district icons (user art): white chip so the violet-cyan gradient reads on every district colour */
+.d-ic{width:78%;height:78%;object-fit:contain;display:block}
+i:has(>.d-ic),.sh-ic:has(>.d-ic){background:#fff!important;box-shadow:inset 0 0 0 2px var(--c,#C8B8F4)}
+.sh-hero{height:150px;margin:-2px -18px 12px;border-radius:22px 22px 14px 14px;background:center/cover no-repeat}
+@media (min-width:761px){.sh-hero{height:190px}}
