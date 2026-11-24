@@ -25,6 +25,8 @@ import { AvatarModel, AvatarStudio } from './avatar.js';
 import { Conversations, CAST } from './conversations.js';
 import { Speech } from './speech.js';
 import { Staging } from './staging.js';
+import { loadVehicles, makeVehicle } from './vehicles.js';
+import { buildStreetLife } from './streetlife.js';
 import { PRESETS, loadSettings, saveSettings, resolvePreset, openSettings } from './settings.js';
 
 const $ = id => document.getElementById(id);
@@ -145,6 +147,7 @@ const FEATURED = ctx.featured; // [{id,name,district,x0,x1,z0,z1,entrance,inside
 const STATIONS = [], PROS = [];
 for (const f of FEATURED) { if (f.id === 'cityhall') continue; const r = furnish(ctx, f); STATIONS.push(...r.stations); PROS.push(...r.npcs); }
 STATIONS.push(...cityHall.stations);
+buildStreetLife(ctx);
 ctx.batch.flush(scene); ctx.inst.flush(scene);
 
 // spatial hash for colliders + floors
@@ -791,12 +794,23 @@ function updatePeople(dt) {
 
 // ------------------------------------------------------------------ traffic
 const cars = [];
-function spawnTraffic() {
-  const colors = [0xf5f7fb, 0x1d2433, 0x8a919c, 0x2f4f7f, 0x8b1e2d, 0xc9ccd1, 0x3a5a40, 0x101a32];
+// V4: Blender-built cars (sedans, NYC taxis, SUVs, delivery vans) with a few Talentopia Transit shuttle pods; procedural cars if the model fails to load
+let vehiclesP = null;
+const preloadVehicles = () => vehiclesP || (vehiclesP = loadVehicles(dracoGltf()).catch(e => { console.warn('vehicles', e); return null; }));
+async function spawnTraffic() {
+  const ok = await preloadVehicles();
+  const paints = [0xf5f7fb, 0x101114, 0xb9bec5, 0x6d737b, 0x2a3f66, 0x8b1e2d, 0xffffff, 0x2b2e33, 0x9aa3ad, 0x3d4a3f];
+  let k = 0;
   ROUTES.forEach((r, ri) => {
-    const pl = polyline(roundLoop(r, 5)); const n = Math.max(3, Math.round(pl.L / 120));
-    for (let i = 0; i < n; i++) { const kind = (i + ri) % 5 === 0 ? 'van' : (i + ri) % 3 === 0 ? 'suv' : 'sedan';
-      const car = (i % 4 === 1) ? makeShuttle() : makeCar(colors[(i * 3 + ri) % colors.length], kind); scene.add(car); cars.push({ car, pl, s: (i / n) * pl.L, v: 8, cruise: 8 + Math.random() * 3, L: car.userData.L }); }
+    const pl = polyline(roundLoop(r, 5)); const n = Math.max(3, Math.round(pl.L / 105));
+    for (let i = 0; i < n; i++, k++) {
+      const roll = (k * 7 + ri * 3) % 12; let car = null;
+      if (roll === 5) car = makeShuttle();
+      else if (ok) { const kind = roll < 3 ? 'taxi' : roll < 6 ? 'sedan' : roll < 10 ? 'suv' : 'van';
+        car = makeVehicle(kind, kind === 'taxi' ? 0xf1b70d : kind === 'van' ? (k % 3 ? 0xf5f7fb : 0x2a3f66) : paints[(k * 3 + ri) % paints.length]); }
+      if (!car) car = makeCar(paints[(k * 3 + ri) % paints.length], roll < 8 ? 'sedan' : 'suv');
+      scene.add(car); cars.push({ car, pl, s: (i / n) * pl.L, v: 8, cruise: 8 + Math.random() * 3, L: car.userData.L });
+    }
   });
 }
 function updateTraffic(dt) {
@@ -817,8 +831,10 @@ function updateTraffic(dt) {
     for (const p of peds) if (p.c && p.c.root.visible) check(p.c.root.position.x, p.c.root.position.z, 9);
     c.v += (want - c.v) * (1 - Math.exp(-dt * (want < c.v ? 3 : 1)));
     c.s += c.v * dt;
-    c.car.position.set(x, 0.02, z); c.car.rotation.y = h;
-    c.car.visible = !pp || Math.hypot(pp.x - x, pp.z - z) < 320 * Q.cars;
+    c.car.position.set(x, c.car.userData.drive ? 0.05 : 0.02, z); c.car.rotation.y = h;
+    const dist = pp ? Math.hypot(pp.x - x, pp.z - z) : 0;
+    c.car.visible = dist < 320 * Q.cars;
+    if (c.car.visible && c.car.userData.drive) c.car.userData.drive(dt, c.v, want < c.v - 0.4 || c.v < 0.3, dist);
   }
 }
 
