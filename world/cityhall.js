@@ -102,8 +102,7 @@ export function buildCityHall(ctx, P) {
   const base = new THREE.Mesh(new THREE.BoxGeometry(760 * k, 0.02, 420 * k), new THREE.MeshStandardMaterial({ color: 0x8fb39a, roughness: 0.9 })); base.position.y = -0.01; model.add(base);
   const you = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), new THREE.MeshBasicMaterial({ color: 0x42dbff, toneMapped: false })); you.position.set((0 - 46) * k, 0.12, 0); model.add(you);
   ctx.animated.push(tt => { model.rotation.y = Math.sin(tt * 0.1) * 0.25; you.scale.setScalar(1 + 0.35 * Math.sin(tt * 4)); ring.material.color.setHSL(0.53 + 0.03 * Math.sin(tt), 0.9, 0.62);
-    // doors open when someone is near the entrance
-    const near = ctx.cityHallNear ? ctx.cityHallNear(CX, z1) : false; doors.forEach(o => { o.k = (o.k || 0) + ((near ? 1 : 0) - (o.k || 0)) * 0.08; o.d.position.x = CX + o.s * (1.3 + o.k * 2.4); }); });
+  });
   // ---------------------------------------------------------------- NOVA: a friendly holographic guide orb
   const nova = new THREE.Group(); nova.position.set(CX + 6.6, floorY, CZ - 5.6); g.add(nova);
   const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.6, 0.9, 32), M('white')); ped.position.y = 0.45; nova.add(ped);

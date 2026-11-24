@@ -1073,7 +1073,7 @@ function step(dtOverride) {
   if (studio.active) { studio.render(dt); return; }
   updatePlayer(dt); conv.update(dt); staging.update(dt); { const mv = P.speed > 0.1 || joy.on; if (mv !== step.mv) { step.mv = mv; document.body.classList.toggle('moving', mv); } } updatePeople(dt); updateTraffic(dt); updateDoors(dt); updateCamera(dt);
   WIND.value = elapsed;
-  for (const f of ctx.animated) f(elapsed, dt);
+  for (const f of ctx.animated) { if (f.broken) continue; try { f(elapsed, dt); } catch (e) { f.broken = true; console.error('animation disabled after an error', e); } } // one bad animation must never stop the frame
   updatePrompt(); updateBeacon(elapsed);
   // sun + shadow follow the avatar
   const fp = player ? P.pos : camTarget; if (!wv.active) snapSun(fp);
