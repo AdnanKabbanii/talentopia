@@ -77,7 +77,9 @@ export function buildCityHall(ctx, P) {
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.8, 12), M('metalLight')); hub.position.y = 1.4; rev.add(hub);
   ctx.animated.push(tt => { const near = ctx.cityHallNear ? ctx.cityHallNear(CX, CZ + R0) : false; rev.rotation.y += near ? 0.012 : 0.004; });
   // lobby floor: polished stone with a champagne inlay ring
-  const fl = new THREE.Mesh(new THREE.CircleGeometry(R0 - 0.1, 72), new THREE.MeshStandardMaterial({ color: 0xf2efe9, roughness: 0.18, metalness: 0.05, envMapIntensity: 1.2 })); fl.rotation.x = -Math.PI / 2; fl.position.set(CX, floorY + 0.012, CZ); fl.receiveShadow = true; g.add(fl);
+  const marble = new THREE.TextureLoader().load('assets/tex/marble_white.jpg', t => { t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2.2, 2.2); t.anisotropy = 8; t.needsUpdate = true; }); // user-provided seamless marble
+  const flGeo = new THREE.CircleGeometry(R0 - 0.1, 72);
+  const fl = new THREE.Mesh(flGeo, new THREE.MeshStandardMaterial({ map: marble, color: 0xfbfaf8, roughness: 0.16, metalness: 0.02, envMapIntensity: 1.25 })); fl.rotation.x = -Math.PI / 2; fl.position.set(CX, floorY + 0.012, CZ); fl.receiveShadow = true; g.add(fl);
   const inlay = new THREE.Mesh(new THREE.RingGeometry(4.2, 4.35, 72), new THREE.MeshBasicMaterial({ color: 0xd8b98a })); inlay.rotation.x = -Math.PI / 2; inlay.position.set(CX, floorY + 0.02, CZ); g.add(inlay);
   // the hologram column from the concept: light rings rising from the city model up into the atrium
   const holo = new THREE.Group(); holo.position.set(CX, floorY + 1.2, CZ); g.add(holo);

@@ -139,7 +139,7 @@ export function runActivity(id, H, cb) {
   S('open');
   const finish = (extra = '') => {
     const score = Math.max(1, 3 - mistakes); const g = H.award('a_' + id, 80, a.badge, a.icon, score, 3); H.closeDialog(true);
-    const show = () => { H.done(a.title + ' · complete', `${extra}${a.explain}<br><br>Accuracy: <b>${'★'.repeat(score)}${'☆'.repeat(3 - score)}</b>${g ? ` · <b>+${g} XP</b>` : ''}<br>Badge: <b>${a.icon} ${esc(a.badge)}</b>`); cb && cb({ done: true, score }); };
+    const show = () => { H.done(a.title + ' · complete', `${a.building ? `<img class="done-badge" src="assets/badges/${a.building}.webp" alt="" onerror="this.remove()">` : ''}${extra}${a.explain}<br><br>Accuracy: <b>${'★'.repeat(score)}${'☆'.repeat(3 - score)}</b>${g ? ` · <b>+${g} XP</b>` : ''}<br>Badge: <b>${a.icon} ${esc(a.badge)}</b>`); cb && cb({ done: true, score }); };
     const wait = S('success', { score }); if (wait) setTimeout(show, wait); else show();
   };
   const close = () => { S('close'); H.closeDialog(); cb && cb({ closed: true }); };

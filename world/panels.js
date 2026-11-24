@@ -45,6 +45,9 @@ export function experienceInfo(id, d) { // → { building, district, title, skil
   const title = act ? act.title : id === 'med_heart' ? 'Heart anatomy challenge' : `${f.name || 'Workplace'} mission`;
   return { building, f, dist, title, skills: SKILLS[id] || [], xp: XP(id) };
 }
+// workplace badge art (user-provided, assets/badges/<building>.webp)
+const BADGES = new Set(['hospital', 'bank', 'agency', 'engineering', 'software', 'kitchen', 'store', 'court', 'research', 'terminal']);
+export const badgeSrc = b => BADGES.has(b) ? `assets/badges/${b}.webp` : null;
 export function openPassport(d, tab = 'journey') {
   // d: { progress, store, ACTIVITIES, FEATURED, DISTRICTS, CAREERS, portrait, onGo(fid), onAvatar(), onLearning() }
   const P = d.progress, sh = P.shifts || {}, ids = Object.keys(sh).sort((a, b) => (sh[b].date || '').localeCompare(sh[a].date || ''));
@@ -60,13 +63,13 @@ export function openPassport(d, tab = 'journey') {
     <div class="pp-stats"><div><b>${xp}</b><span>XP</span></div><div><b>${explored.size}</b><span>Careers explored</span></div><div><b>${missions}</b><span>Missions</span></div><div><b>${ids.length}</b><span>Badges</span></div></div>`;
   const tabs = [['journey', 'My Journey'], ['skills', 'My Skills'], ['badges', 'Achievements'], ['careers', 'My Careers'], ['learning', 'My Learning']];
   let body = '';
-  if (tab === 'journey') body = ids.length ? `<ol class="pp-tl">${ids.map(id => { const i = info[id], s = sh[id]; return `<li style="--c:${i.dist.color || '#8D70FF'}"><button class="pp-tli" data-exp="${id}"><i>${esc(s.icon || i.dist.icon || '✦')}</i><span><b>${esc(i.dist.name || 'Talentopia')} · ${esc(i.title)}</b><em>${esc(s.date || '')} · +${i.xp} XP</em></span></button>
+  if (tab === 'journey') body = ids.length ? `<ol class="pp-tl">${ids.map(id => { const i = info[id], s = sh[id]; return `<li style="--c:${i.dist.color || '#8D70FF'}"><button class="pp-tli" data-exp="${id}">${badgeSrc(i.building) ? `<img class="pp-bimg" src="${badgeSrc(i.building)}" alt="">` : `<i>${esc(s.icon || i.dist.icon || '✦')}</i>`}<span><b>${esc(i.dist.name || 'Talentopia')} · ${esc(i.title)}</b><em>${esc(s.date || '')} · +${i.xp} XP</em></span></button>
       <div class="pp-more" hidden>${esc(s.badge)}<br>Skills practised: <b>${esc(i.skills.join(', ') || 'General')}</b>${s.max ? `<br>Result: ${s.score}/${s.max}` : ''}<br><button class="btn-glass" data-go="${i.building}">Go back to ${esc(i.f.name || 'this workplace')}</button></div></li>`; }).join('')}</ol>`
     : `<div class="pp-empty"><b>Your journey starts here.</b><span>Complete a hands-on experience in any workplace and it will appear on your timeline.</span><button class="btn-primary" data-go="hospital">Try MedCity first</button></div>`;
   if (tab === 'skills') { const m = {}; ids.forEach(id => info[id].skills.forEach(s => (m[s] = m[s] || []).push(info[id].title)));
     const all = ['Analytical thinking', 'Problem-solving', 'Communication', 'Creativity', 'Technical reasoning', 'Teamwork', 'Numeracy', 'Attention to detail', 'Ethical judgement'];
     body = `<p class="pp-note">Skills you have practised, with the experiences that showed them. No scores: just evidence of what you tried.</p><div class="pp-skills">${all.map(s => `<div class="pp-sk ${m[s] ? 'on' : ''}"><b>${s}</b><span>${m[s] ? `${m[s].length} experience${m[s].length > 1 ? 's' : ''}: ${esc(m[s].slice(0, 3).join(', '))}` : 'Not practised yet'}</span></div>`).join('')}</div>`; }
-  if (tab === 'badges') body = ids.length ? `<div class="pp-badges">${ids.map(id => { const i = info[id], s = sh[id]; return `<div class="pp-bd" style="--c:${i.dist.color || '#8D70FF'}"><div class="pp-medal"><span>${esc(s.icon || '✦')}</span></div><b>${esc(s.badge)}</b><em>${esc(i.dist.name || '')} · ${esc(s.date || '')}</em><em>${esc(i.title)} · +${i.xp} XP</em></div>`; }).join('')}</div>` : `<div class="pp-empty"><b>No badges yet.</b><span>Every workplace has hands-on experiences that award a badge.</span></div>`;
+  if (tab === 'badges') body = ids.length ? `<div class="pp-badges">${ids.map(id => { const i = info[id], s = sh[id]; return `<div class="pp-bd" style="--c:${i.dist.color || '#8D70FF'}">${badgeSrc(i.building) ? `<img class="pp-badge-art" src="${badgeSrc(i.building)}" alt="${esc(s.badge)} badge">` : `<div class="pp-medal"><span>${esc(s.icon || '✦')}</span></div>`}<b>${esc(s.badge)}</b><em>${esc(i.dist.name || '')} · ${esc(s.date || '')}</em><em>${esc(i.title)} · +${i.xp} XP</em></div>`; }).join('')}</div>` : `<div class="pp-empty"><b>No badges yet.</b><span>Every workplace has hands-on experiences that award a badge.</span></div>`;
   if (tab === 'careers') { const saved = P.saved || {};
     body = `<div class="pp-careers">${d.DISTRICTS.map(x => { const fs = d.FEATURED.filter(f => f.district === x.id); const done = fs.some(f => explored.has(f.id)), seen = fs.some(f => visited[f.id]);
       const st = done ? 'Explored' : seen ? 'Visited' : 'Not explored yet'; const sv = fs.filter(f => saved[f.id]);

@@ -359,3 +359,9 @@ body.dlg #nav,body.dlg #joy,body.dlg #prompt{opacity:0!important;pointer-events:
 /* V4 welcome art (user-provided): City Hall at dusk on phones, the Talentopia skyline on wider screens */
 #poster{background-image:url(../assets/ui/welcome_phone.jpg)!important;background-position:center 30%!important}
 @media (min-width:761px){#poster{background-image:url(../assets/ui/welcome_wide.jpg)!important;background-position:center!important}}
+/* V4 badge + Passport card art (user-provided) */
+.pp-bimg{width:38px;height:38px;flex:0 0 auto;object-fit:contain;filter:drop-shadow(0 2px 4px rgba(17,24,39,.25))}
+.pp-badge-art{width:84px;height:84px;object-fit:contain;filter:drop-shadow(0 6px 12px rgba(60,30,140,.3))}
+.done-badge{display:block;width:120px;height:120px;margin:-6px auto 4px;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(60,30,140,.35));animation:obIn .45s var(--ease) both}
+.pp-head{padding:14px;border-radius:20px;background:url(../assets/ui/passport_card.webp) center/cover;box-shadow:inset 0 0 0 1px rgba(255,255,255,.6),0 6px 18px rgba(80,50,180,.15)}
+#done .card:has(.done-badge)>div:first-child{display:none}
