@@ -3,7 +3,8 @@
 // Remembers the model that last answered and tries it first next time.
 // Returns { ok, status, data, model, reason } where reason is Google's error status/message (never contains the key).
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
-export const MODELS = [process.env.GEMINI_MODEL, 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash'].filter((m, i, a) => m && a.indexOf(m) === i);
+// Flash-Lite first: on the free tier it answers in about a second, while Flash is often overloaded.
+export const MODELS = [process.env.GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash'].filter((m, i, a) => m && a.indexOf(m) === i);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let preferred = null; // the model that last answered (kept while this serverless instance stays warm)
 
@@ -14,9 +15,10 @@ export async function gemini(key, body) {
     for (let attempt = 0; attempt < 2; attempt++) {
       let r, data = null;
       try {
-        r = await fetch(BASE + encodeURIComponent(model) + ':generateContent', { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) });
-        data = await r.json().catch(() => null);
-      } catch (e) { last = { ok: false, status: 0, data: null, model, reason: 'network' }; break; }
+        const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 15000); // a stuck model is skipped, not waited on
+        try { r = await fetch(BASE + encodeURIComponent(model) + ':generateContent', { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body), signal: ac.signal });
+          data = await r.json().catch(() => null); } finally { clearTimeout(timer); }
+      } catch (e) { last = { ok: false, status: 0, data: null, model, reason: e && e.name === 'AbortError' ? 'timeout' : 'network' }; break; }
       const reason = data && data.error ? `${data.error.status || r.status}: ${String(data.error.message || '').slice(0, 160)}` : '';
       last = { ok: r.ok, status: r.status, data, model, reason };
       if (r.ok) { preferred = model; return last; }
