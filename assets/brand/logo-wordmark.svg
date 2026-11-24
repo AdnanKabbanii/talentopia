@@ -1,0 +1,14 @@
+<!-- Talentopia wordmark: mark + TALENTOPIA + slogan, transparent background (white text for dark backgrounds). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" role="img" aria-label="Talentopia, Step Into Your Future">
+  <defs>
+    <linearGradient id="st" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9b6bff"/><stop offset="1" stop-color="#42c8ff"/></linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8d5cff"/><stop offset="1" stop-color="#b48cff"/></linearGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-width="7.5" transform="translate(6 10)">
+    <path d="M14 24H30Q38 24 38 32V94" stroke="url(#st)"/>
+    <path d="M78 24H62Q54 24 54 32V94" stroke="url(#st)"/>
+  </g>
+  <rect x="8.25" y="14.25" width="87.5" height="7.5" rx="3.75" fill="url(#bar)"/>
+  <text x="122" y="70" fill="#fff" font-family="'Plus Jakarta Sans','Inter','Helvetica Neue',Arial,sans-serif" font-weight="800" font-size="52" letter-spacing="1">TALENTOPIA</text>
+  <text x="124" y="102" fill="#e6e0ff" font-family="'Plus Jakarta Sans','Inter','Helvetica Neue',Arial,sans-serif" font-weight="500" font-size="22" letter-spacing=".4">Step Into Your Future</text>
+</svg>
