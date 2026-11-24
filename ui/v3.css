@@ -389,3 +389,13 @@ i:has(>.d-ic),.sh-ic:has(>.d-ic){background:#fff!important;box-shadow:inset 0 0 
 .wv-lbl.mini span{display:none}.wv-lbl.mini{padding:4px!important}.wv-bld.mini{font-size:0;padding:5px!important;gap:0}
 /* onboarding: the flyover caption never sits on the Make-it-yours card or the avatar picker */
 body:has(#obAbout:not([hidden])) #flyCap,body.in-studio #flyCap{display:none!important}
+/* guided view switch (onboarding) */
+.ob-guide{display:flex;align-items:center;gap:12px;padding:11px 12px;margin:0 0 14px;border-radius:16px;background:rgba(141,112,255,.08);border:1px solid rgba(141,112,255,.25);cursor:pointer}
+.ob-guide span{flex:1;min-width:0}.ob-guide b{display:block;font-size:14px;color:var(--ink)}.ob-guide em{display:block;font-style:normal;font-size:12px;line-height:1.35;color:var(--muted);margin-top:2px}
+.ob-guide input{position:absolute;opacity:0;pointer-events:none}
+.ob-guide i{flex:0 0 auto;width:46px;height:28px;border-radius:999px;background:rgba(17,24,39,.18);position:relative;transition:background var(--t-med) var(--ease)}
+.ob-guide i::after{content:'';position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(17,24,39,.3);transition:transform var(--t-med) var(--ease)}
+.ob-guide input:checked+i{background:linear-gradient(135deg,#9C82FF,var(--violet2))}.ob-guide input:checked+i::after{transform:translateX(18px)}
+.ob-guide input:focus-visible+i{outline:2px solid var(--violet);outline-offset:2px}
+/* guided view off: free exploring, no route list, guide pill or tips */
+body.unguided #obj,body.unguided #hintChip{display:none!important}

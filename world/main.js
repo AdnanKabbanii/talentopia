@@ -95,6 +95,7 @@ function buildComposer(ao, bloom) {
 // ------------------------------------------------------------------ graphics presets + accessibility (Milestone E)
 const settings = loadSettings(); let presetName = 'high';
 function applySettings() {
+  if (typeof applyGuided === 'function') try { applyGuided(); } catch (e) {}
   presetName = resolvePreset(settings, Q.phone); const p = PRESETS[presetName];
   Q.maxPR = p.maxPR; Q.pr = Math.min(devicePixelRatio, p.maxPR); renderer.setPixelRatio(Q.pr); Q.slow = 0;
   Q.people = p.people; Q.cars = p.cars; Q.staff = p.staff; Q.auto = settings.preset === 'auto';
@@ -699,12 +700,12 @@ function event(ev) {
   if (ev.startsWith('act:') || ev.startsWith('mission:')) { track('complete', { id: ev });
     if (DEMO && !event.demoNext) { event.demoNext = true; guideTo(null); const wait = setInterval(() => { if (mode === 'walk') { clearInterval(wait); setTimeout(() => nova('curious'), 600); } }, 500); } }
   if (progress.trail != null && TRAIL[progress.trail] && TRAIL[progress.trail].ev === ev) setTimeout(() => trailStep(progress.trail + 1), 600);
-  if (objIdx < OBJ.length && OBJ[objIdx].ev === ev) { objIdx++; progress.flags.objIdx = objIdx; store(); ui.renderObjectives(OBJ, objIdx); if (objIdx < OBJ.length) ui.toast('✓ Next: ' + OBJ[objIdx].t); }
+  if (objIdx < OBJ.length && OBJ[objIdx].ev === ev) { objIdx++; progress.flags.objIdx = objIdx; store(); ui.renderObjectives(OBJ, objIdx); if (objIdx < OBJ.length && guidedOn()) ui.toast('✓ Next: ' + OBJ[objIdx].t); }
 }
 const beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 40, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x51c9e8, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
 scene.add(beacon);
 function updateBeacon(t) { if (guide && !guide.trail && player && Math.hypot(guide.target.x - P.pos.x, guide.target.z - P.pos.z) < 7) { guideTo(null); ui.toast('You’ve arrived'); }
-  const o = OBJ[objIdx]; const p = guide ? guide.target : o && o.target && o.target(); beacon.visible = !!p && mode !== 'lab'; if (p) { beacon.position.set(p.x, 20, p.z); beacon.material.opacity = 0.18 + 0.1 * Math.sin(t * 3); } }
+  const o = OBJ[objIdx]; const p = guide ? guide.target : o && o.target && o.target(); beacon.visible = !!p && mode !== 'lab' && (guidedOn() || !!guide); if (p) { beacon.position.set(p.x, 20, p.z); beacon.material.opacity = 0.18 + 0.1 * Math.sin(t * 3); } }
 
 // ------------------------------------------------------------------ professional NPCs + pedestrians
 const PRO_CHARS = []; const peds = [];
@@ -1021,7 +1022,11 @@ setTimeout(function slow() { if (isReady) return; // slow connection: say so, an
 const openStudio = (m, dest) => { if (!avatarChar) return enterWorld(dest); pendingDest = dest; studio.scene.environment = scene.environment; studio.open(m, { onSkip: () => { studio.close(); enterWorld(dest); } }); };
 // V4 onboarding step "Make it yours": nickname, school level and interests (device only) shape the welcome, the first stop and the Study Hub
 const INTEREST_ICONS = { medicine: 'med', business: 'capital', tech: 'nexus', design: 'creative', engineering: 'forge', food: 'taste' };
+// guided view (on by default for first-time students): objectives list, beacon to the next stop, guide pill and tips. Off = free exploring
+function guidedOn() { return settings.guided !== false; }
+function applyGuided() { document.body.classList.toggle('unguided', !guidedOn()); }
 function showAbout() {
+  $('obGuided').checked = guidedOn();
   $('obWelcome').hidden = true; $('obAbout').hidden = false;
   const box = $('obInterests'); const picked = new Set(progress.interests || []);
   box.innerHTML = CURIOUS.filter(c => c[0] !== 'unsure').map(c => `<button data-i="${c[0]}" class="${picked.has(c[0]) ? 'on' : ''}"><img src="assets/districts/${INTEREST_ICONS[c[0]]}.webp" alt="">${c[1]}</button>`).join('');
@@ -1030,12 +1035,13 @@ function showAbout() {
   const nm = $('obName'); nm.value = progress.name || ''; nm.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') $('obAboutGo').click(); };
 }
 function saveAbout() {
+  settings.guided = $('obGuided').checked; saveSettings(settings); applyGuided();
   const name = $('obName').value.trim().replace(/[<>]/g, '').slice(0, 20); if (name) progress.name = name;
   const lv = $('obLevel').querySelector('.on'); if (lv) { progress.study = progress.study || { profile: {}, acts: {} }; progress.study.profile = { ...(progress.study.profile || {}), level: lv.dataset.v }; }
   progress.interests = [...$('obInterests').querySelectorAll('.on')].map(b => b.dataset.i); progress.flags.onboarded = true; store();
 }
 $('obAboutGo').onclick = () => { saveAbout(); studio.onboardStep = true; studio.greetName = (progress.name || '').split(' ')[0]; openStudio('quick', 'plaza'); };
-$('obAboutSkip').onclick = () => { progress.flags.onboarded = true; store(); studio.onboardStep = true; studio.greetName = ''; openStudio('quick', 'plaza'); };
+$('obAboutSkip').onclick = () => { settings.guided = $('obGuided').checked; saveSettings(settings); applyGuided(); progress.flags.onboarded = true; store(); studio.onboardStep = true; studio.greetName = ''; openStudio('quick', 'plaza'); };
 $('go').onclick = () => progress.avatarV2 || DEMO ? enterWorld('plaza') : progress.flags.onboarded ? openStudio('quick', 'plaza') : showAbout();
 $('goMed').onclick = () => enterWorld('hospital');
 $('studioBtn').onclick = () => openStudio('full', 'plaza');
@@ -1072,7 +1078,7 @@ async function enterWorld(dest = 'plaza') {
     const quick = returning || settings.reduceMotion;
     intro = { t: 0, dur: quick ? 1.6 : 3.4, from: camera.position.clone(), look: camTarget.clone() }; if (capEl) capEl.style.display = 'none'; document.body.classList.remove('intro');
     const ov = $('overlay'); ov.classList.add('hidden'); setTimeout(() => { ov.style.display = 'none'; }, 300);
-    personaliseRoute(); mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
+    personaliseRoute(); applyGuided(); mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
     spawnPeople(); spawnTraffic(); setTimeout(loadHeart, 6000); setTimeout(() => ctx.loadAds && ctx.loadAds(), 2500);
     const q = new URLSearchParams(location.search).get('go') || (dest === 'hospital' ? 'hospital' : null);
     if (q) whenHospital(() => { const f = FEATURED.find(x => x.id === q); if (f) travelTo(f); });
@@ -1090,7 +1096,7 @@ async function enterWorld(dest = 'plaza') {
 }
 function placeTitle(main, sub) { const el = $('placeTitle'); el.innerHTML = `<small>${sub.toUpperCase()}</small>${main}`; el.classList.add('on'); clearTimeout(placeTitle.t); placeTitle.t = setTimeout(() => el.classList.remove('on'), 2400); }
 function showHint() {
-  if (progress.flags.hintSeen || mode !== 'walk') return; progress.flags.hintSeen = 1; store();
+  if (progress.flags.hintSeen || mode !== 'walk' || !guidedOn()) return; progress.flags.hintSeen = 1; store();
   $('hintTxt').textContent = isTouch ? 'Use the joystick to walk · drag to look around' : 'WASD to walk · drag to look · E to interact';
   const h = $('hintChip'); h.hidden = false; const hide = () => { h.hidden = true; }; $('hintX').onclick = hide; setTimeout(hide, 7000);
 }

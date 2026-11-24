@@ -13,7 +13,7 @@ const KEY = 'talentopiaSettings';
 export function loadSettings() {
   let s = {}; try { s = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
   const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  return { preset: 'auto', reduceMotion: reduce, largeText: false, contrast: false, ...s };
+  return { preset: 'auto', guided: true, reduceMotion: reduce, largeText: false, contrast: false, ...s };
 }
 export function saveSettings(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
 export function resolvePreset(s, isPhone) { return s.preset === 'auto' ? (isPhone ? 'light' : 'high') : s.preset; }
@@ -31,6 +31,8 @@ export function openSettings(s, { isPhone, onChange, speech, fpsNow }) {
       <div class="set-grid">${opt('auto', 'Auto', `Chooses for this device (now: ${PRESETS[eff].label}) and lowers effects if it runs slowly.`)}
         ${Object.entries(PRESETS).map(([k, p]) => opt(k, p.label, p.note)).join('')}</div>
       <div class="set-note">Now running at about <b>${Math.round(fpsNow() || 0)} fps</b>.</div>
+      <h4>Guidance</h4>
+      ${tog('guided', 'Guided view', 'Step-by-step route, a glowing path to your next stop and quick tips. Turn off to explore freely.', s.guided !== false)}
       <h4>Accessibility</h4>
       <label class="set-tog" style="display:block"><b>Camera sensitivity</b><input type="range" min="0.4" max="2" step="0.1" value="${s.camSens || 1}" data-r="camSens" style="width:100%;accent-color:#8D70FF" aria-label="Camera sensitivity"></label>
       ${tog('reduceMotion', 'Reduce motion', 'Calmer camera: no speed zoom, no body lean, a still view behind the start screen.', s.reduceMotion)}
