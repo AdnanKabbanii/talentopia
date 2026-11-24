@@ -151,11 +151,11 @@ export const PRESETS = {
 };
 // ready-made avatars offered during onboarding (portraits in assets/ui/avatars are renders of these exact configs)
 export const READY = [
-  { id: 'sofia', name: 'Sofia', cfg: { pres: -0.85, build: -0.12, muscle: 0.22, skin: 'young_caucasian_female', tone: 0.02, hair: 'bun01', hairColor: '#2b1c14', brows: 'eyebrow001', eyes: '#4a2f1d', cheekbones: 0.35, lipsFull: 0.3, eyesBig: 0.12, outfit: 'signature_f', outfitTint: '#ffffff', shoes: 'shoes03', shoesTint: '#f6f4fa', glasses: 'none', hat: 'none' } },
+  { id: 'sofia', name: 'Sofia', cfg: { makeup: 'natural', pres: -0.85, build: -0.12, muscle: 0.22, skin: 'young_caucasian_female', tone: 0.02, hair: 'bun01', hairColor: '#2b1c14', brows: 'eyebrow001', eyes: '#4a2f1d', cheekbones: 0.35, lipsFull: 0.3, eyesBig: 0.12, outfit: 'signature_f', outfitTint: '#ffffff', shoes: 'shoes03', shoesTint: '#f6f4fa', glasses: 'none', hat: 'none' } },
   { id: 'layla', name: 'Layla', cfg: { pres: -0.85, build: -0.1, muscle: 0.25, skin: 'young_asian_female', tone: -0.04, hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes06', cheekbones: 0.55, lipsFull: 0.35, eyesBig: 0.2, jawWide: 0, makeup: 'natural', eyes: '#5b3a22' } },
-  { id: 'aria', name: 'Aria', cfg: { pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01', cheekbones: 0.45, eyes: '#5b3a22' } },
+  { id: 'aria', name: 'Aria', cfg: { makeup: 'natural', pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01', cheekbones: 0.45, eyes: '#5b3a22' } },
   { id: 'leo', name: 'Leo', cfg: { pres: 0.85, build: 0.05, muscle: 0.5, skin: 'young_caucasian_male', hair: 'short02', hairColor: '#5a3a24', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', outfitTint: '#ffffff', shoes: 'shoes03', jawWide: 0.4, chinStrong: 0.3, eyes: '#3a6ea8' } },
-  { id: 'mei', name: 'Mei', cfg: { pres: -0.7, build: -0.1, muscle: 0.2, skin: 'young_asian_female', hair: 'bob01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'round', eyes: '#5b3a22' } },
+  { id: 'mei', name: 'Mei', cfg: { makeup: 'natural', pres: -0.7, build: -0.1, muscle: 0.2, skin: 'young_asian_female', hair: 'bob01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'round', eyes: '#5b3a22' } },
   { id: 'omar', name: 'Omar', cfg: { pres: 0.8, build: 0.15, muscle: 0.45, skin: 'young_asian_male', hair: 'short01', hairColor: '#141012', brows: 'eyebrow006', beard: 'full', outfit: 'male_elegantsuit01', outfitTint: '#6b6f78', shoes: 'shoes03', jawWide: 0.35, eyes: '#5b3a22' } },
   { id: 'kai', name: 'Kai', cfg: { pres: 0.1, build: 0, muscle: 0.35, skin: 'young_african_male', hair: 'short04', hairColor: '#141012', brows: 'eyebrow001', outfit: 'talentopia_m', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'rect', eyes: '#5b3a22' } },
 ];
@@ -175,7 +175,7 @@ function prepMaterial(o) {
     const lash = /eyelash|lashes/.test(n) || /^lashes__/.test(o.name);
     if ((eye || (cards && !lash)) && !m.isMeshPhysicalMaterial) {
       const p = new THREE.MeshPhysicalMaterial(); THREE.MeshStandardMaterial.prototype.copy.call(p, m); p.name = m.name;
-      if (eye) { p.clearcoat = 1; p.clearcoatRoughness = 0.04; p.roughness = 0.25; p.envMapIntensity = 1.2; } // wet cornea highlight
+      if (eye) { p.clearcoat = 1; p.clearcoatRoughness = 0.02; p.roughness = 0.2; p.envMapIntensity = 1.7; } // wet cornea highlight
       else { p.sheen = 0.55; p.sheenRoughness = 0.38; p.sheenColor = new THREE.Color(0x8a7b6c); p.roughness = 0.5; } // silky strands
       if (Array.isArray(o.material)) o.material[o.material.indexOf(m)] = p; else o.material = p;
     }

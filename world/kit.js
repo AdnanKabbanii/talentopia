@@ -66,11 +66,13 @@ export function M(name) { return mats[name]; }
 export function initMaterials(envIntensity = 1) {
   const std = (o) => new THREE.MeshStandardMaterial(o);
   const P = TX.pbr;
-  mats.asphalt = std({ ...P('asphalt_02', 6), color: 0x8a8d92, roughness: 0.92 });
-  mats.sidewalk = std({ ...P('concrete_pavement', 3), color: 0xd8d4cc, roughness: 0.85 });
-  mats.plaza = std({ ...P('concrete_pavement', 1.6), color: 0xe9e0d2, roughness: 0.85 });
-  mats.pavers = std({ ...P('white_sandstone_bricks', 1.2), color: 0xdcd2c2, roughness: 0.85 });
-  mats.grass = std({ ...P('aerial_grass_rock', 8), color: 0x9fbf7a, roughness: 1 });
+  // ground: gentle normal maps + matte roughness, so the surface detail doesn't sparkle or crawl while walking (specular aliasing)
+  const calm = (o, n) => ({ ...o, normalScale: new THREE.Vector2(n, n) });
+  mats.asphalt = std(calm({ ...P('asphalt_02', 6), color: 0x8a8d92, roughness: 0.97 }, 0.22));
+  mats.sidewalk = std(calm({ ...P('concrete_pavement', 3), color: 0xd8d4cc, roughness: 0.92 }, 0.35));
+  mats.plaza = std(calm({ ...P('concrete_pavement', 1.6), color: 0xe9e0d2, roughness: 0.92 }, 0.35));
+  mats.pavers = std(calm({ ...P('white_sandstone_bricks', 1.2), color: 0xdcd2c2, roughness: 0.92 }, 0.4));
+  mats.grass = std(calm({ ...P('aerial_grass_rock', 8), color: 0x9fbf7a, roughness: 1 }, 0.4));
   mats.meadow = std({ map: TX.meadowTex(), roughness: 1 });
   mats.marble = std({ ...P('marble_tiles', 2.5), roughness: 0.25 });
   mats.parquet = std({ ...P('herringbone_parquet', 2.5), roughness: 0.55 });

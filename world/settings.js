@@ -2,8 +2,8 @@
 // Presets change resolution cap, shadow quality and range, post effects (ambient occlusion, bloom), and how far people/cars
 // are drawn. "Auto" picks by device and keeps the automatic fallbacks (drop effects / lower resolution when the frame rate falls).
 export const PRESETS = {
-  high: { label: 'High', note: 'Full resolution, soft 4K shadows, ambient occlusion and glow. For desktops and laptops with good graphics.',
-    maxPR: 2, shadow: 4096, shadowRange: 110, ao: true, bloom: true, people: 1, cars: 1, staff: 1 },
+  high: { label: 'High', note: 'Full resolution, soft 4K shadows and glow. For desktops and laptops with good graphics.',
+    maxPR: 2, shadow: 4096, shadowRange: 110, ao: false, bloom: true, people: 1, cars: 1, staff: 1 }, // no screen-space AO: it crawled on large floors while moving
   balanced: { label: 'Balanced', note: 'Sharper than Light, 2K shadows and glow, no ambient occlusion. A good middle for most laptops and tablets.',
     maxPR: 1.5, shadow: 2048, shadowRange: 90, ao: false, bloom: true, people: 0.8, cars: 0.8, staff: 0.8 },
   light: { label: 'Light', note: 'Lower resolution, 1K shadows over a short range, no post effects, people and traffic drawn closer. For phones and older computers.',

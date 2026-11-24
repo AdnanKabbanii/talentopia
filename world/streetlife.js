@@ -134,3 +134,53 @@ export function buildAds(ctx) {
     if (free(x, z, 1.5)) board(x, z, ry);
   ctx.adCount = { totems: k / 2, boards: b };
 }
+
+// ---------------------------------------------------------------- V4 street dressing from the concept art: violet banners on the street
+// lamps and purple flower beds around every street tree (all instanced: a handful of draw calls for the whole city)
+function lampBannerTex() {
+  return canvasTex(256, 640, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2a1d6e'); gr.addColorStop(0.5, '#6142d6'); gr.addColorStop(1, '#3a2890'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.lineCap = 'round';
+    for (let i = 0; i < 6; i++) { g.strokeStyle = `rgba(${205 + i * 8},${175 + i * 10},255,${0.7 - i * 0.09})`; g.lineWidth = 5 - i * 0.6; g.beginPath();
+      for (let y = 150; y <= 600; y += 8) { const x = w / 2 + Math.sin(y / 70 + i * 0.6) * (40 + i * 8) * Math.sin((y - 150) / 450 * Math.PI); y === 150 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke(); }
+    // Talentopia mark (bar + two stems), the same shapes as assets/brand/logo.svg
+    const sg = g.createLinearGradient(0, 40, 0, 120); sg.addColorStop(0, '#b48cff'); sg.addColorStop(1, '#42c8ff'); g.strokeStyle = sg; g.lineWidth = 9;
+    g.beginPath(); g.moveTo(w / 2 - 36, 46); g.lineTo(w / 2 + 36, 46); g.stroke();
+    g.beginPath(); g.moveTo(w / 2 - 28, 64); g.lineTo(w / 2 - 12, 64); g.quadraticCurveTo(w / 2 - 6, 64, w / 2 - 6, 72); g.lineTo(w / 2 - 6, 120); g.stroke();
+    g.beginPath(); g.moveTo(w / 2 + 28, 64); g.lineTo(w / 2 + 12, 64); g.quadraticCurveTo(w / 2 + 6, 64, w / 2 + 6, 72); g.lineTo(w / 2 + 6, 120); g.stroke();
+  });
+}
+export function buildStreetDressing(ctx) {
+  const bannerM = new THREE.MeshStandardMaterial({ map: lampBannerTex(), roughness: 0.8, side: THREE.DoubleSide, emissive: 0x6a4ce0, emissiveIntensity: 0.12 });
+  let li = 0;
+  const lampBanner = (x, z, ry) => { if ((li++ % 2)) return; // every other lamp
+    ctx.inst.add('lampBanner', () => { const b = new THREE.PlaneGeometry(0.62, 1.55); b.translate(0.42, 4.15, 0); const arm = new THREE.CylinderGeometry(0.018, 0.018, 0.75, 6); arm.rotateZ(Math.PI / 2); arm.translate(0.42, 4.95, 0);
+      const arm2 = arm.clone(); arm2.translate(0, -1.55, 0); return [[b, bannerM, false], [mergeArms(arm, arm2), M('metalDark'), false]]; }, mat4(x, 0, z, ry + Math.PI / 2)); };
+  const flowerBed = (x, z, seed) => {
+    ctx.inst.add('treePit', () => { const d = new THREE.CircleGeometry(0.85, 20); d.rotateX(-Math.PI / 2); d.translate(0, 0.165, 0); return [[d, new THREE.MeshStandardMaterial({ color: 0x3a2e25, roughness: 1 }), false]]; }, mat4(x, 0, z));
+    const rnd = (n) => { const v = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453; return v - Math.floor(v); };
+    for (let k = 0; k < 4; k++) { const a = k / 4 * Math.PI * 2 + rnd(k) * 0.8, r = 0.5 + rnd(k + 9) * 0.2, s = 0.75 + rnd(k + 3) * 0.4;   // soft leafy tufts
+      ctx.inst.add('bed_tuft', () => { const g = new THREE.IcosahedronGeometry(0.2, 2); g.scale(1.25, 0.7, 1.25); g.translate(0, 0.25, 0); return [[g, M('leaf2'), false]]; }, mat4(x + Math.cos(a) * r, 0, z + Math.sin(a) * r, a, s, s, s)); }
+    for (let k = 0; k < 14; k++) { const a = rnd(k + 20) * Math.PI * 2, r = 0.38 + rnd(k + 40) * 0.4, h = 0.8 + rnd(k + 60) * 0.5, lean = (rnd(k + 80) - 0.5) * 0.35;   // lavender spikes
+      ctx.inst.add('bed_lav', () => { const st = new THREE.CylinderGeometry(0.008, 0.01, 0.3, 4); st.translate(0, 0.32, 0); const sp = new THREE.CylinderGeometry(0.012, 0.03, 0.16, 6); sp.translate(0, 0.53, 0);
+        return [[st, M('leaf2'), false], [sp, new THREE.MeshStandardMaterial({ color: 0x8b62d9, roughness: 0.7 }), false]]; }, mat4(x + Math.cos(a) * r, 0, z + Math.sin(a) * r, a, 1, h, 1, lean, lean * 0.5)); }
+    for (let k = 0; k < 6; k++) { const a = rnd(k + 100) * Math.PI * 2, r = 0.45 + rnd(k + 120) * 0.3, s = 0.8 + rnd(k + 140) * 0.5;   // lilac blossom clusters
+      ctx.inst.add('bed_bloom', () => { const parts = []; for (let j = 0; j < 5; j++) { const q = new THREE.SphereGeometry(0.035, 8, 6); q.translate(Math.cos(j * 1.26) * 0.04, 0.42 + (j % 2) * 0.03, Math.sin(j * 1.26) * 0.04); parts.push(q); }
+        const g = new THREE.BufferGeometry(); const all = parts.map(q => q.toNonIndexed()); const n = all.reduce((t, q) => t + q.attributes.position.count, 0);
+        for (const key of ['position', 'normal']) { const arr = new Float32Array(n * 3); let o = 0; for (const q of all) { arr.set(q.attributes[key].array, o); o += q.attributes[key].array.length; } g.setAttribute(key, new THREE.BufferAttribute(arr, 3)); }
+        const st = new THREE.CylinderGeometry(0.008, 0.01, 0.4, 4); st.translate(0, 0.2, 0);
+        return [[g, new THREE.MeshStandardMaterial({ color: 0xc9b0f6, roughness: 0.65 }), false], [st, M('leaf2'), false]]; }, mat4(x + Math.cos(a) * r, 0, z + Math.sin(a) * r, a, s, s, s)); }
+  };
+  // same positions as the lamps and street trees laid out in city.js buildStreets
+  let seed = 0;
+  for (const z of ZS) for (let i = 0; i < XS.length - 1; i++) for (let x = XS[i] + 18; x < XS[i + 1] - 14; x += 26) {
+    lampBanner(x, z - ROAD / 2 - 0.7, 0); lampBanner(x + 13, z + ROAD / 2 + 0.7, Math.PI);
+    flowerBed(x + 6.5, z - ROAD / 2 - 1.3, seed++); flowerBed(x + 19.5, z + ROAD / 2 + 1.3, seed++);
+  }
+  for (const x of XS) for (let i = 0; i < ZS.length - 1; i++) for (let z = ZS[i] + 18; z < ZS[i + 1] - 14; z += 26) {
+    lampBanner(x - ROAD / 2 - 0.7, z, Math.PI / 2); lampBanner(x + ROAD / 2 + 0.7, z + 13, -Math.PI / 2);
+    flowerBed(x - ROAD / 2 - 1.3, z + 6.5, seed++); flowerBed(x + ROAD / 2 + 1.3, z + 19.5, seed++);
+  }
+}
+function mergeArms(a, b) { const g = new THREE.BufferGeometry(); const pa = a.toNonIndexed().attributes, pb = b.toNonIndexed().attributes;
+  for (const k of ['position', 'normal', 'uv']) { const A = pa[k].array, B = pb[k].array, C = new Float32Array(A.length + B.length); C.set(A); C.set(B, A.length); g.setAttribute(k, new THREE.BufferAttribute(C, pa[k].itemSize)); } return g; }

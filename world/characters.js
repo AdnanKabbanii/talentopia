@@ -227,7 +227,8 @@ export class Character {
     if (this.blinkT <= 0) this.blinkT = 2.2 + Math.random() * 3.5;
     this.setMorph('blinkL', b); this.setMorph('blinkR', b);
     const ke = Math.min(1, dt * 5), kv = Math.min(1, dt * 22);
-    for (const k in this.expr) { this.exprCur[k] += (this.expr[k] - this.exprCur[k]) * ke; this.setMorph(k, this.exprCur[k]); }
+    const rest = { smile: 0.2, browsUp: 0.06 }; // a soft, friendly resting face instead of a blank stare
+    for (const k in this.expr) { this.exprCur[k] += (this.expr[k] - this.exprCur[k]) * ke; this.setMorph(k, Math.max(rest[k] || 0, this.exprCur[k])); }
     for (const k in this.vis) { this.visCur[k] += (this.vis[k] - this.visCur[k]) * kv; this.setMorph(k, this.visCur[k]); }
   }
   setMorph(name, v) { for (const m of this.morphMeshes) { const i = m.morphTargetDictionary[name]; if (i !== undefined) m.morphTargetInfluences[i] = v; } }

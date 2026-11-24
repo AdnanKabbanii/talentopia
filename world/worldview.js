@@ -3,7 +3,7 @@
 // Touch: one-finger drag pans, pinch zooms, tap selects, double-tap focuses. Mouse: drag pans, wheel zooms, Shift/right-drag rotates.
 import * as THREE from 'three';
 // district icon / gateway art (user-provided): assets/districts/<id>.webp and <id>_hero.jpg
-const DIC = new Set(['med', 'capital', 'creative', 'forge', 'nexus', 'taste', 'planet', 'civic', 'market', 'sky']), DHERO = new Set(['med']);
+const DIC = new Set(['med', 'capital', 'creative', 'forge', 'nexus', 'taste', 'planet', 'civic', 'market', 'sky']), DHERO = new Set(['med', 'creative', 'forge', 'capital', 'nexus']);
 const dIcon = x => x && DIC.has(x.id) ? `<img class="d-ic" src="assets/districts/${x.id}.webp" alt="">` : (x && x.icon) || '◆';
 const dHero = x => x && DHERO.has(x.id) ? `<div class="sh-hero" style="background-image:url(assets/districts/${x.id}_hero.jpg)"></div>` : '';
 

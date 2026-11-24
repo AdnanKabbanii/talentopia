@@ -75,6 +75,7 @@ export function buildPlaza(ctx) {
     const v = [...pts[0], ...pts[1], ...pts[2], ...pts[0], ...pts[2], ...pts[3]];
     g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 2, 3, 0, 0, 2, 3, 0, 3], 2)); g.computeVertexNormals();
     if (g.attributes.normal.getY(0) < 0) { const idx = [...pts[0], ...pts[2], ...pts[1], ...pts[0], ...pts[3], ...pts[2]]; g.setAttribute('position', new THREE.Float32BufferAttribute(idx, 3)); g.computeVertexNormals(); }
+    { const ps = g.attributes.position, uvm = []; for (let i = 0; i < ps.count; i++) uvm.push(ps.getX(i) + rx, ps.getZ(i) + rz); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvm, 2)); } // metre UVs: same tile size as the plaza
     ctx.geo(g, M('plaza'), mat4(rx, 0, rz), false);
     if (ax) ctx.floor(rx - L / 2, rx + L / 2, rz - W / 2, rz + W / 2, 0, { axis: 'x', from: rx + ax * L / 2, to: rx - ax * L / 2, h0, h1 });
     else ctx.floor(rx - W / 2, rx + W / 2, rz - L / 2, rz + L / 2, 0, { axis: 'z', from: rz + az * L / 2, to: rz - az * L / 2, h0, h1 });

@@ -26,7 +26,7 @@ import { Conversations, CAST } from './conversations.js';
 import { Speech } from './speech.js';
 import { Staging } from './staging.js';
 import { loadVehicles, makeVehicle } from './vehicles.js';
-import { buildStreetLife, buildAds } from './streetlife.js';
+import { buildStreetLife, buildAds, buildStreetDressing } from './streetlife.js';
 import { StudyHub } from './study.js';
 import { PRESETS, loadSettings, saveSettings, resolvePreset, openSettings } from './settings.js';
 
@@ -50,7 +50,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-TX.setAniso(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
+TX.setAniso(Math.min(16, renderer.capabilities.getMaxAnisotropy())); // full anisotropy: ground textures stay crisp and stable at grazing angles
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xd3dde8, 260, 2100);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.2, 2500); // near 0.2: more depth precision for ground layers
@@ -148,7 +148,7 @@ const FEATURED = ctx.featured; // [{id,name,district,x0,x1,z0,z1,entrance,inside
 const STATIONS = [], PROS = [];
 for (const f of FEATURED) { if (f.id === 'cityhall') continue; const r = furnish(ctx, f); STATIONS.push(...r.stations); PROS.push(...r.npcs); }
 STATIONS.push(...cityHall.stations);
-buildStreetLife(ctx); buildAds(ctx);
+buildStreetLife(ctx); buildAds(ctx); buildStreetDressing(ctx);
 ctx.batch.flush(scene); ctx.inst.flush(scene);
 
 // spatial hash for colliders + floors
@@ -1094,8 +1094,8 @@ function perfTick() {
   perf.n++; if (now - perf.t >= 1000) { perf.fps = perf.n * 1000 / (now - perf.t); perf.ms = (now - perf.t) / perf.n; perf.t = now; perf.n = 0; perf.hist.push(perf.fps); if (perf.hist.length > 60) perf.hist.shift();
     if (mode !== 'loading' && !document.hidden) {
       if (composer && Q.auto && perf.fps < 34) { lowFps++; if (lowFps > 4) { composer = null; lowFps = 0; ui.toast('Reduced effects for smoother movement'); } } else lowFps = 0;
-      if (perf.fps < 28) { Q.slow++; if (Q.slow >= 3 && Q.pr > 0.85) { Q.pr = Math.max(0.85, Q.pr - 0.15); renderer.setPixelRatio(Q.pr); if (composer) composer.setPixelRatio ? composer.setPixelRatio(Q.pr) : 0; Q.slow = 0; } }
-      else if (perf.fps > 50 && Q.pr < Math.min(devicePixelRatio, Q.maxPR)) { Q.slow--; if (Q.slow <= -5) { Q.pr = Math.min(Math.min(devicePixelRatio, Q.maxPR), Q.pr + 0.1); renderer.setPixelRatio(Q.pr); Q.slow = 0; } }
+      if (perf.fps < 28) { Q.slow++; if (Q.slow >= 5 && Q.pr > 0.85) { Q.pr = Math.max(0.85, Q.pr - 0.15); renderer.setPixelRatio(Q.pr); if (composer) composer.setPixelRatio ? composer.setPixelRatio(Q.pr) : 0; Q.slow = 0; } }
+      else if (perf.fps > 50 && !step.mv && Q.pr < Math.min(devicePixelRatio, Q.maxPR)) { /* only sharpen while standing still: no visible resolution pops mid-walk */ Q.slow--; if (Q.slow <= -5) { Q.pr = Math.min(Math.min(devicePixelRatio, Q.maxPR), Q.pr + 0.1); renderer.setPixelRatio(Q.pr); Q.slow = 0; } }
       else Q.slow = 0; }
     if (dbg) drawDebug(); perf.worst = 0; }
 }
