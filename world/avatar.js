@@ -25,7 +25,7 @@ function augmentCatalog(cat) {
   // modelled in Blender on the avatar body (blender/signature_outfit.py): cropped jacket with stand collar and light piping, wide cargo trousers, belt
   cat.parts.outfit.unshift({ id: 'signature_f', label: 'Signature · iridescent', file: 'parts/outfit_signature01.glb', mesh: 'outfit__signature01', style: 'signature2',
     hideCompose: [{ bit: cat.hideBits.female_elegantsuit01 }, { bit: cat.hideBits.male_elegantsuit01 }] });
-  const pt = cat.parts.hair.find(p => p.id === 'ponytail01'); if (pt) cat.parts.hair.splice(cat.parts.hair.indexOf(pt) + 1, 0, { ...pt, id: 'bun01', label: 'Messy bun', bun: true });
+  // (the procedural 'Messy bun' is retired until it is modelled properly; saved bun looks fall back to the ponytail)
   return cat;
 }
 const pearlCache = {};
@@ -135,7 +135,7 @@ function skinWithMakeup(tex, body, look) {
   const R = regionsFor(body), L = document.createElement('canvas'); L.width = W; L.height = H; const lg = L.getContext('2d');
   const fill = (tris, col) => { lg.fillStyle = col; lg.beginPath(); for (const t of tris) { lg.moveTo(t[0] * W, t[1] * H); lg.lineTo(t[2] * W, t[3] * H); lg.lineTo(t[4] * W, t[5] * H); lg.closePath(); } lg.fill(); };
   const bold = look === 'bold';
-  fill(R.lips, bold ? 'rgba(150,30,70,0.85)' : 'rgba(175,70,90,0.6)'); fill(R.lids, bold ? 'rgba(85,50,150,0.85)' : 'rgba(110,70,125,0.65)');
+  fill(R.lips, bold ? 'rgba(150,30,70,0.8)' : 'rgba(214,128,132,0.34)'); fill(R.lids, bold ? 'rgba(85,50,150,0.75)' : 'rgba(176,140,150,0.14)');
   g.save(); g.filter = `blur(${Math.max(2, W / 600)}px)`; g.globalCompositeOperation = 'multiply'; g.drawImage(L, 0, 0); g.restore();
   const t = new THREE.CanvasTexture(c); t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return (makeupCache[k] = t);
 }
@@ -151,11 +151,11 @@ export const PRESETS = {
 };
 // ready-made avatars offered during onboarding (portraits in assets/ui/avatars are renders of these exact configs)
 export const READY = [
-  { id: 'sofia', name: 'Sofia', cfg: { makeup: 'natural', pres: -0.85, build: -0.12, muscle: 0.22, skin: 'young_caucasian_female', tone: 0.02, hair: 'bun01', hairColor: '#2b1c14', brows: 'eyebrow001', eyes: '#4a2f1d', cheekbones: 0.35, lipsFull: 0.3, eyesBig: 0.12, outfit: 'signature_f', outfitTint: '#ffffff', shoes: 'shoes03', shoesTint: '#f6f4fa', glasses: 'none', hat: 'none' } },
-  { id: 'layla', name: 'Layla', cfg: { pres: -0.85, build: -0.1, muscle: 0.25, skin: 'young_asian_female', tone: -0.04, hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes06', cheekbones: 0.55, lipsFull: 0.35, eyesBig: 0.2, jawWide: 0, makeup: 'natural', eyes: '#5b3a22' } },
-  { id: 'aria', name: 'Aria', cfg: { makeup: 'natural', pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01', cheekbones: 0.45, eyes: '#5b3a22' } },
+  { id: 'sofia', name: 'Sofia', cfg: { eyesBig: 0.38, eyesUp: 0.12, nose: -0.3, cheekbones: 0.42, lipsFull: 0.28, jawWide: 0, chinStrong: 0, head: -0.18, makeup: 'natural', pres: -0.85, build: -0.12, muscle: 0.22, skin: 'young_caucasian_female', tone: 0.02, hair: 'ponytail01', hairColor: '#2b1c14', brows: 'eyebrow001', eyes: '#4a2f1d', outfit: 'signature_f', outfitTint: '#ffffff', shoes: 'shoes03', shoesTint: '#f6f4fa', glasses: 'none', hat: 'none' } },
+  { id: 'layla', name: 'Layla', cfg: { eyesBig: 0.38, eyesUp: 0.12, nose: -0.3, cheekbones: 0.42, lipsFull: 0.28, jawWide: 0, chinStrong: 0, head: -0.18, pres: -0.85, build: -0.1, muscle: 0.25, skin: 'young_asian_female', tone: -0.04, hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes06', makeup: 'natural', eyes: '#5b3a22' } },
+  { id: 'aria', name: 'Aria', cfg: { eyes: '#3a2416', eyesBig: 0.38, eyesUp: 0.12, nose: -0.3, cheekbones: 0.42, lipsFull: 0.28, jawWide: 0, chinStrong: 0, head: -0.18, makeup: 'natural', pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01'} },
   { id: 'leo', name: 'Leo', cfg: { pres: 0.85, build: 0.05, muscle: 0.5, skin: 'young_caucasian_male', hair: 'short02', hairColor: '#5a3a24', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', outfitTint: '#ffffff', shoes: 'shoes03', jawWide: 0.4, chinStrong: 0.3, eyes: '#3a6ea8' } },
-  { id: 'mei', name: 'Mei', cfg: { makeup: 'natural', pres: -0.7, build: -0.1, muscle: 0.2, skin: 'young_asian_female', hair: 'bob01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'round', eyes: '#5b3a22' } },
+  { id: 'mei', name: 'Mei', cfg: { eyesBig: 0.38, eyesUp: 0.12, nose: -0.3, cheekbones: 0.42, lipsFull: 0.28, jawWide: 0, chinStrong: 0, head: -0.18, makeup: 'natural', pres: -0.7, build: -0.1, muscle: 0.2, skin: 'young_asian_female', hair: 'bob02', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_casualsuit01', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'round', eyes: '#5b3a22' } },
   { id: 'omar', name: 'Omar', cfg: { pres: 0.8, build: 0.15, muscle: 0.45, skin: 'young_asian_male', hair: 'short01', hairColor: '#141012', brows: 'eyebrow006', beard: 'full', outfit: 'male_elegantsuit01', outfitTint: '#6b6f78', shoes: 'shoes03', jawWide: 0.35, eyes: '#5b3a22' } },
   { id: 'kai', name: 'Kai', cfg: { pres: 0.1, build: 0, muscle: 0.35, skin: 'young_african_male', hair: 'short04', hairColor: '#141012', brows: 'eyebrow001', outfit: 'talentopia_m', outfitTint: '#ffffff', shoes: 'shoes03', glasses: 'rect', eyes: '#5b3a22' } },
 ];
@@ -175,7 +175,7 @@ function prepMaterial(o) {
     const lash = /eyelash|lashes/.test(n) || /^lashes__/.test(o.name);
     if ((eye || (cards && !lash)) && !m.isMeshPhysicalMaterial) {
       const p = new THREE.MeshPhysicalMaterial(); THREE.MeshStandardMaterial.prototype.copy.call(p, m); p.name = m.name;
-      if (eye) { p.clearcoat = 1; p.clearcoatRoughness = 0.02; p.roughness = 0.2; p.envMapIntensity = 1.7; } // wet cornea highlight
+      if (eye) { p.clearcoat = 1; p.clearcoatRoughness = 0.03; p.roughness = 0.3; p.envMapIntensity = 0.9; } // wet cornea highlight
       else { p.sheen = 0.55; p.sheenRoughness = 0.38; p.sheenColor = new THREE.Color(0x8a7b6c); p.roughness = 0.5; } // silky strands
       if (Array.isArray(o.material)) o.material[o.material.indexOf(m)] = p; else o.material = p;
     }
@@ -384,7 +384,7 @@ export class AvatarModel {
     const tail = i => { v.fromBufferAttribute(pos, i); const behind = (v.z - hc.z) * f; return v.y < hc.y - 0.105 || (v.y < hc.y - 0.035 && behind < -0.06); };
     const idx = g0.index.array, keepIdx = []; let topY = -1e9, backZ = hc.z;
     for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i); if (v.y > topY) topY = v.y; if (v.y > hc.y && (v.z - hc.z) * f < (backZ - hc.z) * f) backZ = v.z; }
-    for (let i = 0; i < idx.length; i += 3) if (!(tail(idx[i]) && tail(idx[i + 1]) && tail(idx[i + 2]))) keepIdx.push(idx[i], idx[i + 1], idx[i + 2]);
+    for (let i = 0; i < idx.length; i += 3) if (!(tail(idx[i]) || tail(idx[i + 1]) || tail(idx[i + 2]))) keepIdx.push(idx[i], idx[i + 1], idx[i + 2]);
     const g = new THREE.BufferGeometry(); for (const k in g0.attributes) g.setAttribute(k, g0.attributes[k]); g.morphAttributes = g0.morphAttributes; g.morphTargetsRelative = g0.morphTargetsRelative; g.setIndex(keepIdx);
     g.boundingSphere = g0.boundingSphere; s.geometry = g;
     const up = new THREE.Vector3(0, 0.62, -0.78 * f).normalize(), back = new THREE.Vector3(0, 0.78, 0.62 * f).normalize(), side = new THREE.Vector3(1, 0, 0);
@@ -395,6 +395,7 @@ export class AvatarModel {
     const down = new THREE.Vector3(0, -1, 0), fr = new THREE.Vector3(0, 0, f);
   }
   async apply() {
+    if (this.cfg.hair === 'bun01') this.cfg.hair = 'ponytail01';
     const c = this.cfg, kinds = { hair: c.hair, outfit: c.outfit, shoes: c.shoes, hat: c.hat };
     await Promise.all(Object.entries(kinds).map(([k, id]) => id && id !== 'none' ? this.loadPart(k, id) : null));
     for (const key in this.partMeshes) { const [k, id] = key.split(':'); const on = kinds[k] === id; for (const m of this.partMeshes[key]) m.visible = on; }
@@ -446,7 +447,7 @@ export class AvatarModel {
       }
     }
     for (const m of this.meshes) {
-      if (/^brows__/.test(m.name)) { for (const mt of [].concat(m.material)) { if (mt.map && !mt.userData.gray) { mt.map = grayCached(mt.map); mt.userData.gray = true; } mt.color.copy(hairC).multiplyScalar(0.8); } }
+      if (/^brows__/.test(m.name)) { for (const mt of [].concat(m.material)) { if (mt.map && !mt.userData.gray) { mt.map = grayCached(mt.map); mt.userData.gray = true; } mt.color.copy(hairC).lerp(new THREE.Color(0x7a5a46), 0.38); } }
       if (/^beard__/.test(m.name)) { for (const mt of [].concat(m.material)) { if (!mt.userData.strands) { const dn = /full/.test(m.name); mt.map = shared.strands[dn] || (shared.strands[dn] = strandsTex(dn)); mt.alphaTest = 0; mt.alphaHash = true; mt.transparent = false; mt.userData.strands = true; mt.roughness = 0.9; mt.needsUpdate = true; } mt.color.copy(hairC).multiplyScalar(0.9); } }
       if (/^eyes__/.test(m.name) && this._eyes !== c.eyes) { for (const mt of [].concat(m.material)) if (mt.map && mt.map.image) { const src = mt.map.userData.src || mt.map.image; const k = c.eyes; if (!shared.iris[k]) { const t0 = mt.map; t0.userData.src = src; shared.iris[k] = recolorIris(t0, k); } mt.map = shared.iris[k]; mt.needsUpdate = true; } }
     }

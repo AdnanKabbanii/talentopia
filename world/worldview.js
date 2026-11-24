@@ -90,6 +90,24 @@ export class WorldView {
     this.labels.querySelectorAll('[data-d]').forEach(b => b.onclick = e => { e.stopPropagation(); this.focusDistrict(b.dataset.d); });
     this.labels.querySelectorAll('[data-f]').forEach(b => b.onclick = e => { e.stopPropagation(); this.focusBuilding(b.dataset.f); });
   }
+  // keep labels readable on phones: inside the screen, below the search bar, clear of the zoom tools; colliding labels shrink to their icon, then hide
+  declutter(W, H) {
+    const topEl = document.querySelector('.wv-top'), tools = document.querySelector('.wv-tools'), back = document.querySelector('.wv-back');
+    const top = topEl ? topEl.getBoundingClientRect().bottom + 6 : 90, tr = tools ? tools.getBoundingClientRect() : null, br = back ? back.getBoundingClientRect() : null;
+    const sheet = this.sheet && this.sheet.classList.contains('open') ? this.sheet.getBoundingClientRect().top : H;
+    const placed = [], items = [...this.labels.querySelectorAll('.wv-lbl, .wv-bld')].filter(b => b.style.display !== 'none');
+    items.sort((a, b) => (b.classList.contains('on') - a.classList.contains('on')) || (a.classList.contains('wv-lbl') - b.classList.contains('wv-lbl')) * (this.level === 'city' ? -1 : 1));
+    const hit = r => placed.some(q => r.l < q.r + 4 && r.r > q.l - 4 && r.t < q.b + 3 && r.b > q.t - 3) || (tr && r.r > tr.left - 4 && r.t < tr.bottom && r.b > tr.top) || (br && r.b > br.top - 4 && r.r > br.left && r.l < br.right);
+    for (const b of items) {
+      b.classList.remove('mini'); const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(b.style.transform); if (!m) continue;
+      const ax = +m[1], ay = +m[2], dist = b.classList.contains('wv-lbl'); const rect = () => { const w = b.offsetWidth, h = b.offsetHeight; let x = Math.min(Math.max(ax, w / 2 + 8), W - w / 2 - 8);
+        const yTop = dist ? ay - h / 2 : ay - h; const r = { l: x - w / 2, r: x + w / 2, t: yTop, b: yTop + h, x }; return r; };
+      let r = rect();
+      if (r.t < top || r.b > sheet - 4) { b.style.display = 'none'; continue; }
+      if (hit(r)) { b.classList.add('mini'); r = rect(); if (hit(r)) { b.style.display = 'none'; b.classList.remove('mini'); continue; } }
+      b.style.transform = `translate(${r.x}px,${ay}px) translate(-50%,${dist ? '-50%' : '-100%'})`; placed.push(r);
+    }
+  }
   placeLabels() {
     const cam = this.d.camera, W = innerWidth, H = innerHeight, o = this.o; const v = this.v;
     const showBld = o.dist < 520, showDist = o.dist > 140;
@@ -99,6 +117,7 @@ export class WorldView {
     this.labels.querySelectorAll('[data-f]').forEach(b => { const f = this.d.FEATURED().find(q => q.id === b.dataset.f); if (!f) { b.style.display = 'none'; return; }
       v.set((f.x0 + f.x1) / 2, (f.gfH || 5) + 10, (f.z0 + f.z1) / 2).project(cam); const on = showBld && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
       b.style.display = on ? '' : 'none'; if (on) b.style.transform = `translate(${(v.x + 1) / 2 * W}px,${(1 - v.y) / 2 * H}px) translate(-50%,-100%)`; b.classList.toggle('on', this.selBuilding === f.id); });
+    this.declutter(W, H);
     const me = document.getElementById('wvMe'), p = this.d.playerPos(); if (me && p) { v.set(p.x, p.y + 2, p.z).project(cam); const on = v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1; me.style.display = on ? '' : 'none'; if (on) me.style.transform = `translate(${(v.x + 1) / 2 * W}px,${(1 - v.y) / 2 * H}px) translate(-50%,-100%)`; }
   }
   // ------------------------------------------------------------ district / building focus

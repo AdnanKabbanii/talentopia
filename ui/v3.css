@@ -385,3 +385,7 @@ i:has(>.d-ic),.sh-ic:has(>.d-ic){background:#fff!important;box-shadow:inset 0 0 
 .ob-chips button img{width:26px;height:26px;flex:0 0 auto}
 .ob-chips button.on{border-color:var(--violet);background:rgba(141,112,255,.12);box-shadow:0 0 0 3px rgba(141,112,255,.16)}.ob-chips button:active{transform:scale(.97)}
 @media (min-width:761px){.ob-chips{grid-template-columns:1fr 1fr}}
+/* World View: colliding labels shrink to their icon */
+.wv-lbl.mini span{display:none}.wv-lbl.mini{padding:4px!important}.wv-bld.mini{font-size:0;padding:5px!important;gap:0}
+/* onboarding: the flyover caption never sits on the Make-it-yours card or the avatar picker */
+body:has(#obAbout:not([hidden])) #flyCap,body.in-studio #flyCap{display:none!important}
