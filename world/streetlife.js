@@ -91,3 +91,46 @@ export function buildStreetLife(ctx) {
     }
   });
 }
+
+// ---------------------------------------------------------------- V4 advertising (user-provided art in assets/ads):
+// backlit two-sided poster totems on the sidewalks and large billboards around Central Plaza. Textures stream in after the
+// world is built (dark panels until then), so they never slow the first load.
+const POSTERS = ['poster_medicine', 'poster_engineering', 'poster_creative', 'poster_business', 'poster_culinary', 'poster_technology'];
+const BOARDS = ['billboard_try_10_careers', 'billboard_step_into_your_future', 'billboard_learn_by_doing', 'billboard_classroom_to_career'];
+export function buildAds(ctx) {
+  const free = (x, z, r) => !ctx.colliders.some(b => x > b.x0 - r && x < b.x1 + r && z > b.z0 - r && z < b.z1 + r && b.y0 < 2);
+  const loader = new THREE.TextureLoader(), mats = {};
+  const mat = name => mats[name] || (mats[name] = new THREE.MeshStandardMaterial({ color: 0x20243a, roughness: 0.35, emissive: 0xffffff, emissiveIntensity: 0, side: THREE.FrontSide }));
+  ctx.loadAds = () => { for (const name in mats) loader.load(`assets/ads/${name}.jpg`, t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; const m = mats[name]; m.map = t; m.emissiveMap = t; m.color.set(0xffffff); m.emissiveIntensity = 0.45; m.needsUpdate = true; }); };
+  const frameM = M('metalDark') || new THREE.MeshStandardMaterial({ color: 0x2a2f3a, metalness: 0.6, roughness: 0.4 });
+  const glowM = new THREE.MeshBasicMaterial({ color: 0xb9a4ff, toneMapped: false });
+  // ---- poster totems: 1.3 x 1.95 m backlit panels, a different career poster on each face
+  let k = 0;
+  const totem = (x, z, ry) => {
+    const g = new THREE.Group(); g.position.set(x, 0.15, z); g.rotation.y = ry; ctx.scene.add(g);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.35, 0.26), frameM); body.position.y = 1.32; body.castShadow = true; g.add(body);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 0.4), frameM); base.position.y = 0.06; g.add(base);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.03, 0.27), glowM); strip.position.y = 2.5; g.add(strip);
+    for (const s of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.95), mat(POSTERS[k++ % POSTERS.length])); p.position.set(0, 1.35, s * 0.135); if (s < 0) p.rotation.y = Math.PI; g.add(p); }
+    ctx.collider(x - 0.8, x + 0.8, z - 0.8, z + 0.8, 0, 2.6);
+  };
+  for (let i = 0; i < XS.length - 1; i++) for (const z of ZS) for (const s of [-1, 1]) {   // along the east-west streets, facing along the sidewalk
+    const x = (XS[i] + XS[i + 1]) / 2 + (s > 0 ? -30 : 30), zz = z + s * (HALF - 1.6); if (free(x, zz, 1.0)) totem(x, zz, Math.PI / 2);
+  }
+  for (let j = 0; j < ZS.length - 1; j++) for (const x of XS) {                            // along the north-south avenues
+    const z = (ZS[j] + ZS[j + 1]) / 2 + 22, xx = x + (HALF - 1.6); if (free(xx, z, 1.0)) totem(xx, z, 0);
+  }
+  // ---- billboards: 9 x 3 m on twin posts, lit by a light bar, at the four plaza approaches
+  let b = 0;
+  const board = (x, z, ry) => {
+    const g = new THREE.Group(); g.position.set(x, 0.15, z); g.rotation.y = ry; ctx.scene.add(g);
+    for (const s of [-1, 1]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 5.2, 12), frameM); post.position.set(s * 2.8, 2.6, -0.1); post.castShadow = true; g.add(post); }
+    const back = new THREE.Mesh(new THREE.BoxGeometry(9.4, 3.4, 0.3), frameM); back.position.set(0, 6.6, -0.18); back.castShadow = true; g.add(back);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(9, 3), mat(BOARDS[b++ % BOARDS.length])); face.position.set(0, 6.6, 0); g.add(face);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.08, 0.5), glowM); bar.position.set(0, 8.35, 0.1); g.add(bar);
+    ctx.collider(x - 3.2, x + 3.2, z - 0.6, z + 0.6, 0, 9);
+  };
+  for (const [x, z, ry] of [[-24, 50, 0], [26, 50, 0], [-24, -50, Math.PI], [26, -50, Math.PI], [50, -22, Math.PI / 2], [-50, -22, -Math.PI / 2]]) // plaza outer ring, facing the streets, clear of the ramps
+    if (free(x, z, 1.5)) board(x, z, ry);
+  ctx.adCount = { totems: k / 2, boards: b };
+}

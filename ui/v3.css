@@ -356,3 +356,6 @@ body.dlg #nav,body.dlg #joy,body.dlg #prompt{opacity:0!important;pointer-events:
 .st-lock-ic{width:36px;height:36px;flex:0 0 auto;border-radius:11px;display:grid;place-items:center;background:rgba(17,24,39,.06);font-size:17px;filter:grayscale(.4);opacity:.8}
 .st-lock-t{flex:1;min-width:0;opacity:.75}.st-lock-t b{display:block;font-size:13.5px}.st-lock-t em{display:block;font-style:normal;font-size:12px;color:var(--muted)}
 .st-lock .soon{flex:0 0 auto;font-size:10.5px;letter-spacing:.3px}
+/* V4 welcome art (user-provided): City Hall at dusk on phones, the Talentopia skyline on wider screens */
+#poster{background-image:url(../assets/ui/welcome_phone.jpg)!important;background-position:center 30%!important}
+@media (min-width:761px){#poster{background-image:url(../assets/ui/welcome_wide.jpg)!important;background-position:center!important}}

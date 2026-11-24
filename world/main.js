@@ -26,7 +26,7 @@ import { Conversations, CAST } from './conversations.js';
 import { Speech } from './speech.js';
 import { Staging } from './staging.js';
 import { loadVehicles, makeVehicle } from './vehicles.js';
-import { buildStreetLife } from './streetlife.js';
+import { buildStreetLife, buildAds } from './streetlife.js';
 import { StudyHub } from './study.js';
 import { PRESETS, loadSettings, saveSettings, resolvePreset, openSettings } from './settings.js';
 
@@ -148,7 +148,7 @@ const FEATURED = ctx.featured; // [{id,name,district,x0,x1,z0,z1,entrance,inside
 const STATIONS = [], PROS = [];
 for (const f of FEATURED) { if (f.id === 'cityhall') continue; const r = furnish(ctx, f); STATIONS.push(...r.stations); PROS.push(...r.npcs); }
 STATIONS.push(...cityHall.stations);
-buildStreetLife(ctx);
+buildStreetLife(ctx); buildAds(ctx);
 ctx.batch.flush(scene); ctx.inst.flush(scene);
 
 // spatial hash for colliders + floors
@@ -1044,7 +1044,7 @@ async function enterWorld(dest = 'plaza') {
     intro = { t: 0, dur: quick ? 1.6 : 3.4, from: camera.position.clone(), look: camTarget.clone() }; if (capEl) capEl.style.display = 'none'; document.body.classList.remove('intro');
     const ov = $('overlay'); ov.classList.add('hidden'); setTimeout(() => { ov.style.display = 'none'; }, 300);
     mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
-    spawnPeople(); spawnTraffic(); setTimeout(loadHeart, 6000);
+    spawnPeople(); spawnTraffic(); setTimeout(loadHeart, 6000); setTimeout(() => ctx.loadAds && ctx.loadAds(), 2500);
     const q = new URLSearchParams(location.search).get('go') || (dest === 'hospital' ? 'hospital' : null);
     if (q) whenHospital(() => { const f = FEATURED.find(x => x.id === q); if (f) travelTo(f); });
     intro.done = () => {
