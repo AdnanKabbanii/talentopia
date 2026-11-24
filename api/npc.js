@@ -4,7 +4,7 @@
 // the "Ask your own question" choice, so scripted dialogue is used. Talentopia stores nothing here; Google may use free-tier
 // requests to improve its products.
 // Uses raw fetch because the site is a static, no-build project (no package.json / SDK install).
-const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+import { gemini } from './_gemini.js';
 const clip = (s, n) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, n);
 
 export default async function handler(req, res) {
@@ -32,15 +32,11 @@ Give general career information only, not medical, legal or financial advice for
   const declined = 'That’s not something I can talk about. Ask me anything about my work here!';
 
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { temperature: 0.8, maxOutputTokens: 2048 } }),
-    });
+    const g = await gemini(key, { systemInstruction: { parts: [{ text: system }] }, contents, generationConfig: { temperature: 0.8, maxOutputTokens: 2048 } });
     // free-tier quota reached: answer in character instead of failing
-    if (r.status === 429) return res.status(200).json({ reply: 'I’m helping a lot of visitors right now. Ask me again in a minute!', busy: true });
-    const j = await r.json();
-    if (!r.ok) return res.status(502).json({ error: 'upstream', status: r.status });
+    if (g.status === 429) return res.status(200).json({ reply: 'I’m helping a lot of visitors right now. Ask me again in a minute!', busy: true });
+    const j = g.data || {};
+    if (!g.ok) return res.status(502).json({ error: 'upstream', status: g.status, model: g.model, reason: g.reason });
     const cand = (j.candidates || [])[0];
     if ((j.promptFeedback && j.promptFeedback.blockReason) || !cand || cand.finishReason === 'SAFETY' || cand.finishReason === 'PROHIBITED_CONTENT') return res.status(200).json({ reply: declined });
     const reply = ((cand.content && cand.content.parts) || []).map(p => p.text || '').join(' ').replace(/[*_#`]/g, '').trim();

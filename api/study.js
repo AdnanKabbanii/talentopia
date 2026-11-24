@@ -4,7 +4,7 @@
 // optionally picks the model (default: the latest Flash alias, which is on the free tier). With no key, GET returns
 // { enabled: false } and the game builds questions from the notes in the browser instead (labelled as not AI).
 // Talentopia stores nothing here; note that Google may use free-tier requests to improve its products.
-const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+import { gemini } from './_gemini.js';
 const SCHEMA = { type: 'OBJECT', required: ['careerHook', 'questions'], properties: {
   careerHook: { type: 'STRING' },
   questions: { type: 'ARRAY', items: { type: 'OBJECT', required: ['q', 'options', 'answer', 'explain', 'topic'], properties: {
@@ -51,15 +51,11 @@ Reply as JSON: careerHook is one sentence linking the topic to this workplace; e
     : `Write ${count} career-discovery questions about working at this workplace.`;
 
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6, maxOutputTokens: 8192 } }),
-    });
-    if (r.status === 429) return res.status(429).json({ error: 'busy' }); // free-tier quota reached: the game falls back to the on-device builder
-    const j = await r.json();
-    if (!r.ok) return res.status(502).json({ error: 'upstream', status: r.status });
+    const g = await gemini(key, { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6, maxOutputTokens: 8192 } });
+    if (g.status === 429) return res.status(429).json({ error: 'busy' }); // free-tier quota reached: the game falls back to the on-device builder
+    const j = g.data || {};
+    if (!g.ok) return res.status(502).json({ error: 'upstream', status: g.status, model: g.model, reason: g.reason });
     const cand = (j.candidates || [])[0];
     if ((j.promptFeedback && j.promptFeedback.blockReason) || !cand || cand.finishReason === 'SAFETY' || cand.finishReason === 'PROHIBITED_CONTENT') return res.status(200).json({ error: 'refused' });
     const txt = ((cand.content && cand.content.parts) || []).map(p => p.text || '').join('');
