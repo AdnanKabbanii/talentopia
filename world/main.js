@@ -1019,7 +1019,24 @@ setTimeout(function slow() { if (isReady) return; // slow connection: say so, an
   setTimeout(() => { if (!isReady) { $('err').style.display = 'block'; $('err').innerHTML = 'The city is taking a long time to load. <button class="linkbtn" onclick="location.reload()">Retry</button>'; } }, 40000);
 }, 20000);
 const openStudio = (m, dest) => { if (!avatarChar) return enterWorld(dest); pendingDest = dest; studio.scene.environment = scene.environment; studio.open(m, { onSkip: () => { studio.close(); enterWorld(dest); } }); };
-$('go').onclick = () => progress.avatarV2 || DEMO ? enterWorld('plaza') : openStudio('quick', 'plaza');
+// V4 onboarding step "Make it yours": nickname, school level and interests (device only) shape the welcome, the first stop and the Study Hub
+const INTEREST_ICONS = { medicine: 'med', business: 'capital', tech: 'nexus', design: 'creative', engineering: 'forge', food: 'taste' };
+function showAbout() {
+  $('obWelcome').hidden = true; $('obAbout').hidden = false;
+  const box = $('obInterests'); const picked = new Set(progress.interests || []);
+  box.innerHTML = CURIOUS.filter(c => c[0] !== 'unsure').map(c => `<button data-i="${c[0]}" class="${picked.has(c[0]) ? 'on' : ''}"><img src="assets/districts/${INTEREST_ICONS[c[0]]}.webp" alt="">${c[1]}</button>`).join('');
+  box.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { b.classList.toggle('on'); b.setAttribute('aria-pressed', b.classList.contains('on')); });
+  $('obLevel').querySelectorAll('[data-v]').forEach(b => b.onclick = () => $('obLevel').querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', x === b)));
+  const nm = $('obName'); nm.value = progress.name || ''; nm.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') $('obAboutGo').click(); };
+}
+function saveAbout() {
+  const name = $('obName').value.trim().replace(/[<>]/g, '').slice(0, 20); if (name) progress.name = name;
+  const lv = $('obLevel').querySelector('.on'); if (lv) { progress.study = progress.study || { profile: {}, acts: {} }; progress.study.profile = { ...(progress.study.profile || {}), level: lv.dataset.v }; }
+  progress.interests = [...$('obInterests').querySelectorAll('.on')].map(b => b.dataset.i); progress.flags.onboarded = true; store();
+}
+$('obAboutGo').onclick = () => { saveAbout(); studio.onboardStep = true; studio.greetName = (progress.name || '').split(' ')[0]; openStudio('quick', 'plaza'); };
+$('obAboutSkip').onclick = () => { progress.flags.onboarded = true; store(); studio.onboardStep = true; studio.greetName = ''; openStudio('quick', 'plaza'); };
+$('go').onclick = () => progress.avatarV2 || DEMO ? enterWorld('plaza') : progress.flags.onboarded ? openStudio('quick', 'plaza') : showAbout();
 $('goMed').onclick = () => enterWorld('hospital');
 $('studioBtn').onclick = () => openStudio('full', 'plaza');
 $('goContinue').onclick = () => enterWorld('saved');
@@ -1027,6 +1044,18 @@ $('goWorld').onclick = () => enterWorld('world');
 $('goEdit').onclick = () => openStudio('full', 'saved');
 $('goNew').onclick = () => { if (!confirm('Start fresh? This clears the avatar, XP and progress saved on this device.')) return; try { localStorage.removeItem(KEY); localStorage.removeItem('talentopiaVoice'); } catch (e) {} location.reload(); };
 // dest: 'plaza' (first visit), 'saved' (continue where you left off), 'hospital' (Explore MedCity), 'world' (straight into World View)
+// the guided route follows the student's first interest: walk there, try its hands-on activity, then explore further
+function firstPick() { const top = (progress.interests || [])[0]; const pick = top && CURIOUS.find(c => c[0] === top); const f = pick && FEATURED.find(x => x.id === pick[3]); return f ? { pick, f } : null; }
+function personaliseRoute() {
+  const fp = firstPick(); if (!fp || fp.f.id === 'hospital') return; // medicine keeps the original MedCity route
+  if (progress.flags.routeFor !== fp.f.id) { progress.flags.routeFor = fp.f.id; objIdx = 0; progress.flags.objIdx = 0; store(); }
+  const aid = Object.keys(ACTIVITIES).find(k => ACTIVITIES[k].building === fp.f.id); const st = aid && STATIONS.find(s => s.action === 'act:' + aid);
+  OBJ.splice(0, OBJ.length,
+    { t: `Walk to ${fp.f.name}`, ev: 'enter:' + fp.f.id, target: () => fp.f.entrance, custom: true },
+    ...(aid ? [{ t: `Try it: ${ACTIVITIES[aid].title}`, ev: 'act:' + aid, target: () => st }] : []),
+    { t: 'Visit MedCity General Hospital', ev: 'enter:hospital', target: () => FEATURED.find(f => f.id === 'hospital')?.entrance },
+    { t: 'Explore another district (World tab)', ev: 'never', target: () => null });
+}
 async function enterWorld(dest = 'plaza') {
   if (player) return; for (const id of ['go', 'goContinue']) $(id).disabled = true; audioStart();
   try {
@@ -1043,12 +1072,15 @@ async function enterWorld(dest = 'plaza') {
     const quick = returning || settings.reduceMotion;
     intro = { t: 0, dur: quick ? 1.6 : 3.4, from: camera.position.clone(), look: camTarget.clone() }; if (capEl) capEl.style.display = 'none'; document.body.classList.remove('intro');
     const ov = $('overlay'); ov.classList.add('hidden'); setTimeout(() => { ov.style.display = 'none'; }, 300);
-    mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
+    personaliseRoute(); mode = 'walk'; ui.renderObjectives(OBJ, objIdx); canvas.focus();
     spawnPeople(); spawnTraffic(); setTimeout(loadHeart, 6000); setTimeout(() => ctx.loadAds && ctx.loadAds(), 2500);
     const q = new URLSearchParams(location.search).get('go') || (dest === 'hospital' ? 'hospital' : null);
     if (q) whenHospital(() => { const f = FEATURED.find(x => x.id === q); if (f) travelTo(f); });
     intro.done = () => {
-      placeTitle(dest === 'hospital' ? 'MedCity' : returning ? 'Welcome back' : 'Welcome to Talentopia', dest === 'hospital' ? 'Medicine & health' : 'Talent City');
+      const nm = progress.name ? progress.name.split(' ')[0] : '';
+      placeTitle(dest === 'hospital' ? 'MedCity' : returning ? (nm ? `Welcome back, ${nm}` : 'Welcome back') : (nm ? `Welcome, ${nm}` : 'Welcome to Talentopia'), dest === 'hospital' ? 'Medicine & health' : 'Talent City');
+      // first visit with interests: NOVA points to the matching workplace as the first stop
+      // (the personalised objective already draws the beacon to the first stop, so no extra guide pill)
       if (dest === 'world' && typeof openWorldView === 'function') setTimeout(() => openWorldView(), 400);
       else if (DEMO) setTimeout(() => nova(), 1800);
       else setTimeout(showHint, 2600);

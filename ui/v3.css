@@ -371,3 +371,17 @@ i:has(>.d-ic),.sh-ic:has(>.d-ic){background:#fff!important;box-shadow:inset 0 0 
 .sh-hero{height:150px;margin:-2px -18px 12px;border-radius:22px 22px 14px 14px;background:center/cover no-repeat}
 @media (min-width:761px){.sh-hero{height:190px}}
 @media (max-width:760px){#dialog .opts>.row:last-child,#dialog .qz-act{background:linear-gradient(180deg,rgba(246,248,252,0),rgba(246,248,252,.98) 18%,rgba(246,248,252,.98));-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}}
+/* ------------------------------------------------ V4 onboarding: Make it yours */
+.ob-steps{display:flex;gap:6px;margin:0 0 10px}.ob-steps i{width:22px;height:4px;border-radius:4px;background:rgba(17,24,39,.12)}.ob-steps i.on{background:linear-gradient(90deg,#9C82FF,var(--cyan));width:34px}
+.ob-h2{font-size:26px!important;margin:6px 0 12px!important}
+#obAbout{max-height:calc(100vh - 40px - var(--safe-t) - var(--safe-b));overflow:auto;overscroll-behavior:contain}
+.ob-field{display:flex;flex-direction:column;gap:7px;margin:0 0 14px}.ob-field>span{font-size:13px;font-weight:700;color:var(--ink2)}.ob-field em{font-style:normal;font-weight:600;color:var(--muted);margin-left:4px}
+.ob-field input{font:inherit;font-size:16px;padding:12px 14px;border-radius:14px;border:1px solid rgba(17,24,39,.12);background:rgba(255,255,255,.85);color:var(--ink)}
+.ob-field input:focus{outline:2px solid rgba(141,112,255,.55);outline-offset:1px}
+.ob-seg{display:grid;grid-template-columns:1fr 1fr;padding:4px;border-radius:999px;background:rgba(17,24,39,.06)}
+.ob-seg button{min-height:40px;border-radius:999px;font-weight:700;font-size:14px;color:var(--ink2);background:transparent}.ob-seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(17,24,39,.12)}
+.ob-chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ob-chips button{display:flex;align-items:center;gap:8px;min-height:46px;padding:6px 10px;border-radius:14px;background:rgba(255,255,255,.75);border:1.5px solid rgba(17,24,39,.08);font-weight:700;font-size:13px;color:var(--ink);text-align:left;line-height:1.2;transition:transform var(--t-fast) var(--ease),border-color var(--t-med),background var(--t-med)}
+.ob-chips button img{width:26px;height:26px;flex:0 0 auto}
+.ob-chips button.on{border-color:var(--violet);background:rgba(141,112,255,.12);box-shadow:0 0 0 3px rgba(141,112,255,.16)}.ob-chips button:active{transform:scale(.97)}
+@media (min-width:761px){.ob-chips{grid-template-columns:1fr 1fr}}

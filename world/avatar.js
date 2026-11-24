@@ -546,7 +546,7 @@ export class AvatarStudio {
       // expression preview
       this.exprT += dt; const av = this.avatar;
       const set = (n, v) => av.setExpression(n, v);
-      ['smile', 'jawOpen', 'mouthO', 'mouthE', 'browsUp'].forEach(n => set(n, 0));
+      ['smile', 'jawOpen', 'mouthO', 'mouthE', 'browsUp'].forEach(n => set(n, 0)); set('smile', 0.2); set('browsUp', 0.06); // soft resting smile, as in the city
       if (this.expr === 'smile') { set('smile', 0.9); set('browsUp', 0.2); }
       if (this.expr === 'talk') { const t = this.exprT * 7; set('jawOpen', 0.25 + 0.25 * Math.max(0, Math.sin(t))); set('mouthO', 0.4 * Math.max(0, Math.sin(t * 0.7 + 1))); set('mouthE', 0.4 * Math.max(0, Math.cos(t * 0.9))); }
       if (this.expr === 'surprised') { set('browsUp', 1); set('jawOpen', 0.35); set('mouthO', 0.5); }
@@ -616,7 +616,7 @@ export class AvatarStudio {
   }
   buildQuick() {
     const av = this.avatar, sel = this.readyId;
-    $('studioPanel').innerHTML = `<div class="st-grab"></div><div class="st-head"><div><b>Choose your avatar</b><span>Pick one to start. You can change everything later.</span></div></div>
+    $('studioPanel').innerHTML = `<div class="st-grab"></div><div class="st-head"><div>${this.onboardStep ? '<div class="ob-steps"><i></i><i class="on"></i></div><div class="eyebrow">Step 2 of 2 · Your look</div>' : ''}<b>${this.greetName ? `Choose your avatar, ${this.greetName.replace(/[<>&"]/g, '')}` : 'Choose your avatar'}</b><span>Pick one to start. You can change everything later.</span></div></div>
       <div class="st-body"><div class="av-grid">${READY.map(r => `<button class="av-card ${sel === r.id ? 'on' : ''}" data-ready="${r.id}" aria-label="Avatar ${r.name}"><img src="assets/ui/avatars/${r.id}.jpg" alt="" loading="lazy"><span>${r.name}</span></button>`).join('')}</div>
         <button class="st-row" data-custom><span>✎ Customize my avatar</span><em>Face, hair, skin, body, outfit</em></button>
         <button class="st-row" data-photo><span>✦ Create my Digital Twin</span><em class="soon">Coming soon</em></button></div>

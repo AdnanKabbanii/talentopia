@@ -205,6 +205,17 @@ body.intro #top,body.intro #where,body.intro #obj,body.intro #mini,body.intro #h
       <div class="ob-secondary"><button class="btn-glass" id="goMed" disabled>Explore MedCity</button><button class="btn-glass" id="studioBtn" disabled>Create Your Avatar</button></div>
       <p class="ob-foot">No download needed. Explore as a guest.</p>
     </section>
+    <section class="ob-panel lg" id="obAbout" hidden aria-labelledby="obAboutTitle">
+      <div class="ob-steps" aria-hidden="true"><i class="on"></i><i></i></div>
+      <div class="eyebrow">Step 1 of 2 · Make it yours</div>
+      <h1 id="obAboutTitle" class="ob-h2">Let’s set up your city.</h1>
+      <label class="ob-field"><span>What should we call you?</span><input id="obName" maxlength="20" autocomplete="nickname" placeholder="A nickname (optional)"></label>
+      <div class="ob-field"><span>I’m in</span><div class="ob-seg" id="obLevel"><button data-v="highschool" class="on">High school</button><button data-v="university">University</button></div></div>
+      <div class="ob-field"><span>What sounds interesting? <em>Pick any</em></span><div class="ob-chips" id="obInterests"></div></div>
+      <button class="btn-primary btn-xl" id="obAboutGo">Next: choose your avatar</button>
+      <button class="linkbtn ob-new" id="obAboutSkip">Skip for now</button>
+      <p class="ob-foot">Saved only on this device. No email or account needed.</p>
+    </section>
     <section class="ob-panel lg" id="obBack" hidden aria-labelledby="obBackTitle">
       <div class="ob-brand"><img class="logo-slot" src="assets/brand/logo.svg" alt="" width="28" height="28"><span>TALENTOPIA</span></div>
       <h1 id="obBackTitle">Welcome back.</h1>
