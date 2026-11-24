@@ -1,5 +1,6 @@
 // Streams the Blender-authored landmark GLBs (assets/landmarks) and places them where the city layout registered them.
 import * as THREE from 'three';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 function prep(root) {
   root.traverse(o => {
@@ -16,13 +17,14 @@ function prep(root) {
 }
 
 export function loadLandmarks(ctx, scene, loader) {
+  if (!loader.dracoLoader) loader.setDRACOLoader(new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/')); // V4 models (City Hall) are Draco-compressed
   const files = [...new Set(ctx.landmarks.map(l => l.file))];
   const cache = {};
   return Promise.all(files.map(f => new Promise(res => loader.load(`assets/landmarks/${f}.glb`, g => { cache[f] = prep(g.scene); res(); }, undefined, () => { console.warn('landmark failed', f); res(); }))))
     .then(() => {
       for (const l of ctx.landmarks) {
         const src = cache[l.file]; if (!src) continue;
-        const o = src.clone(); o.position.set(l.x, l.y, l.z); o.rotation.y = l.ry || 0; o.name = 'landmark:' + l.file; scene.add(o); l.object = o;
+        const o = src.clone(); o.position.set(l.x, l.y, l.z); o.rotation.y = l.ry || 0; o.name = 'landmark:' + l.file; scene.add(o); l.object = o; if (l.onLoad) l.onLoad(o);
       }
       return cache;
     });

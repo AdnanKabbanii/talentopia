@@ -85,9 +85,7 @@ export function buildPlaza(ctx) {
   for (const s of [-1, 1]) for (const k of [-1, 1]) {
     ctx.box(s * 35.25, 0.15, k * 20.5, 0.5, P, 29, M('limestone'), { collide: true }); ctx.box(k * 20.5, 0.15, s * 35.25, 29, P, 0.5, M('limestone'), { collide: true });
   }
-  // Talentopia Tower (Blender landmark, streamed as GLB) north of the fountain
-  const T = { x: 0, z: -20 };
-  ctx.landmark('talentopia_tower', T.x, P, T.z, 0, { w: 30, d: 30, h: 150, name: 'Talentopia Tower', district: 'plaza', color: '#8D70FF', collide: false }); // City Hall (cityhall.js) adds the walk-in lobby walls
+  // north of the fountain: Talentopia City Hall (cityhall.js, Blender model blender/cityhall.py)
   // fountain
   const F = { x: 0, z: 8 };
   ctx.geo(ucyl(9, 9.3, 0.7, 48), M('limestone'), mat4(F.x, P + 0.35, F.z));
@@ -98,7 +96,7 @@ export function buildPlaza(ctx) {
   ctx.scene.add(jets); ctx.animated.push(t => jets.children.forEach((j, i) => { j.scale.y = 0.75 + 0.3 * Math.sin(t * 3 + i); }));
   ctx.collider(F.x - 9, F.x + 9, F.z - 9, F.z + 9, 0, 2);
   // landscaping: lawns with trees, benches, planters
-  for (const [lx, lz] of [[-24, 24], [24, 24], [-24, -6], [24, -6]]) {
+  for (const [lx, lz] of [[-24, 24], [24, 24]]) { // (the north lawns became City Hall's curved flower beds)
     ctx.box(lx, P, lz, 14, 0.12, 14, M('grass'), { shadow: false });
     ctx.box(lx, P, lz, 14.6, 0.35, 0.3, M('limestone')); // low edging hints
     treeAt(ctx, lx - 3, lz - 3, 1.1, P); treeAt(ctx, lx + 3.5, lz + 2.5, 1.0, P); ctx.collider(lx - 7, lx + 7, lz - 7, lz + 7, 0, 0.5);
