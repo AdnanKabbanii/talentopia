@@ -22,7 +22,7 @@ export async function gemini(key, body) {
       const reason = data && data.error ? `${data.error.status || r.status}: ${String(data.error.message || '').slice(0, 160)}` : '';
       last = { ok: r.ok, status: r.status, data, model, reason };
       if (r.ok) { preferred = model; return last; }
-      if (r.status === 429) return last;                                  // the free quota is used up
+      if (r.status === 429) break;                                        // this model's free quota is used up: each model has its own, try the next
       if (r.status >= 400 && r.status < 500 && r.status !== 404) return last; // bad key / bad request: another model won't help
       if (r.status >= 500 && attempt === 0) { await sleep(800); continue; } // temporary overload: retry once
       break;                                                              // 404 (model not available) or second 5xx: next model
