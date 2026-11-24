@@ -1,9 +1,14 @@
 // Talentopia Study Hub: turns a student's own chapter/notes (or, in general mode, a career) into multiple-choice questions
 // set inside a Talentopia workplace (Vercel serverless function).
-// Disabled unless the ANTHROPIC_API_KEY environment variable is set on the Vercel project. With no key, GET returns
+// Uses Google's Gemini API (Google AI Studio key). Disabled unless GEMINI_API_KEY is set on the Vercel project; GEMINI_MODEL
+// optionally picks the model (default: the latest Flash alias, which is on the free tier). With no key, GET returns
 // { enabled: false } and the game builds questions from the notes in the browser instead (labelled as not AI).
-// Nothing is stored here: the text is used for this one request and discarded.
-const MODEL = 'claude-opus-5-5';
+// Talentopia stores nothing here; note that Google may use free-tier requests to improve its products.
+const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+const SCHEMA = { type: 'OBJECT', required: ['careerHook', 'questions'], properties: {
+  careerHook: { type: 'STRING' },
+  questions: { type: 'ARRAY', items: { type: 'OBJECT', required: ['q', 'options', 'answer', 'explain', 'topic'], properties: {
+    q: { type: 'STRING' }, options: { type: 'ARRAY', items: { type: 'STRING' } }, answer: { type: 'INTEGER' }, explain: { type: 'STRING' }, topic: { type: 'STRING' } } } } } };
 const clip = (s, n) => String(s || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').slice(0, n);
 const BUILDINGS = {
   hospital: 'MedCity General Hospital (doctors, nurses, pharmacists, radiographers, biomedical scientists)',
@@ -19,7 +24,7 @@ const BUILDINGS = {
 };
 
 export default async function handler(req, res) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = process.env.GEMINI_API_KEY;
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'GET') return res.status(200).json({ enabled: !!key });
   if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
@@ -40,22 +45,24 @@ ${mode === 'notes'
     : 'Questions help the student discover what this workplace\'s careers involve: tasks, skills, school subjects that help, and training routes. Keep facts general and accurate.'}
 Pitch the difficulty at ${level} level. Plain, friendly English. Exactly 4 options per question, one clearly correct, distractors plausible.
 Never ask about the student's personal life, identity or abilities. No medical, legal or financial advice for the student's own situation.
-Reply with JSON only, no prose and no code fences, in this shape:
-{"careerHook":"one sentence linking the topic to this workplace","questions":[{"q":"...","options":["...","...","...","..."],"answer":0,"explain":"one or two sentences","topic":"2-4 word topic"}]}`;
+Reply as JSON: careerHook is one sentence linking the topic to this workplace; each question has q, exactly 4 options, answer (the 0-based index of the correct option), explain (one or two sentences) and topic (2 to 4 words).`;
   const user = mode === 'notes'
     ? `Write ${count} questions from these notes.${title ? ` Chapter: ${title}.` : ''}${subject ? ` Subject: ${subject}.` : ''}\n\n<notes>\n${notes}\n</notes>`
     : `Write ${count} career-discovery questions about working at this workplace.`;
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 4096, system, messages: [{ role: 'user', content: user }], output_config: { effort: 'low' }, fallbacks: 'default' }),
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.6, maxOutputTokens: 8192 } }),
     });
+    if (r.status === 429) return res.status(429).json({ error: 'busy' }); // free-tier quota reached: the game falls back to the on-device builder
     const j = await r.json();
     if (!r.ok) return res.status(502).json({ error: 'upstream', status: r.status });
-    if (j.stop_reason === 'refusal') return res.status(200).json({ error: 'refused' });
-    const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+    const cand = (j.candidates || [])[0];
+    if ((j.promptFeedback && j.promptFeedback.blockReason) || !cand || cand.finishReason === 'SAFETY' || cand.finishReason === 'PROHIBITED_CONTENT') return res.status(200).json({ error: 'refused' });
+    const txt = ((cand.content && cand.content.parts) || []).map(p => p.text || '').join('');
     const data = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
     const questions = (Array.isArray(data.questions) ? data.questions : []).filter(q => q && typeof q.q === 'string' && Array.isArray(q.options) && q.options.length === 4
       && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < 4).slice(0, count)

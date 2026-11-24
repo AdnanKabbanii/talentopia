@@ -136,7 +136,7 @@ export class StudyHub {
       const ids = Object.keys(this.d.CAREERS);
       html += `<div class="st-note">Pick a workplace. Its team asks you questions about what they do, the skills they use and how people get there.</div><div class="st-cars">${ids.map(id => this.chip(id, `data-gen="${id}"`)).join('')}</div>`;
     }
-    html += `<p class="st-priv">${this.ai ? 'Your chapters are saved only on this device. When you practise, the text of that chapter is sent to our AI question writer to create questions, and is not kept.' : 'Your chapters are saved only on this device and never uploaded. Questions are built from your notes’ own sentences on your device.'}</p>`;
+    html += `<p class="st-priv">${this.ai ? 'Your chapters are saved only on this device. When you practise, the text of that chapter is sent to Google Gemini to write your questions. Talentopia doesn’t store it; Google may use these requests to improve its services.' : 'Your chapters are saved only on this device and never uploaded. Questions are built from your notes’ own sentences on your device.'}</p>`;
     B.innerHTML = html; this.wire();
   }
   renderAdd() {
@@ -202,6 +202,7 @@ export class StudyHub {
           ? { mode: 'notes', building, level, count: 6, title: ch.title, subject: ch.subject, text: this.excerpt(ch) } : { mode: 'general', building, level, count: 5 }) });
         if (r.ok) { const j = await r.json(); if (j.questions && j.questions.length) { qs = j.questions; hook = j.careerHook || ''; source = 'ai'; } } } catch (e) {}
     }
+    if (!qs.length && this.ai) this.d.toast('The AI writer is busy right now, so these questions come straight from your notes.');
     if (!qs.length) qs = ch ? buildQuestions(ch.text, 6) : careerQuestions(this.d.CAREERS, building, 5);
     const busy = B && B.querySelector('.st-busy'); if (busy) busy.remove();
     if (qs.length < 2) return this.d.toast(ch ? 'Smarter questions for short and bullet-point notes are coming soon. For now, add a few full sentences to this chapter.' : 'No questions available for this workplace yet.');
