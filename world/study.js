@@ -128,6 +128,7 @@ export class StudyHub {
     if (this.tab === 'notes') {
       const chs = await lib.all().catch(() => []); this.chs = chs;
       html += `<button class="btn-primary btn-xl" data-add>＋ Add a chapter or notes</button>`;
+      if (!this.ai) html += `<div class="st-lock" aria-disabled="true"><span class="st-lock-ic">✨</span><span class="st-lock-t"><b>AI question writer</b><em>Questions set in real workplace moments, from any kind of notes</em></span><span class="soon">Coming soon</span></div>`;
       html += chs.length ? `<div class="st-list">${chs.map(ch => { const m = this.mastery(ch); const top = (ch.careers || [])[0]; const b = top ? this.bInfo(top) : null;
         return `<button class="st-ch" data-ch="${ch.id}"><span class="st-ch-ic" style="--c:${b ? b.color : '#C8B8F4'}">${b ? b.icon : '📘'}</span><span class="st-ch-t"><b>${esc(ch.title)}</b><em>${esc(ch.subject || 'Notes')} · ${(ch.words || 0).toLocaleString()} words${b ? ` · fits ${esc(b.name)}` : ''}</em></span>${m === null ? '<span class="st-new">New</span>' : `<span class="st-m"><b>${m}%</b><i style="--p:${m}%"></i></span>`}</button>`; }).join('')}</div>`
         : `<div class="st-empty"><b>No chapters yet.</b> Add a PDF, a Word file, a text file, or paste your notes. Talentopia finds the careers that use what you’re learning and turns your notes into questions you answer inside those workplaces.</div>`;
@@ -144,6 +145,7 @@ export class StudyHub {
       <label class="st-f"><span>Subject</span><input id="stSubj" maxlength="60" placeholder="e.g. Biology" list="stSubjects"><datalist id="stSubjects">${['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Economics', 'Business', 'Computer science', 'History', 'Geography', 'Law', 'Psychology', 'Literature', 'Art & design', 'Nutrition'].map(s => `<option>${s}</option>`).join('')}</datalist></label>
       <div class="st-drop"><input type="file" id="stFile" accept=".pdf,.docx,.txt,.md,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
         <button class="btn-glass" data-file>📄 Choose a file</button><em>PDF, Word (.docx) or text · read on your device</em><div id="stFileName" class="st-fn"></div></div>
+      ${`<div class="st-lock" aria-disabled="true"><span class="st-lock-ic">📷</span><span class="st-lock-t"><b>Photos & scanned pages</b><em>Snap your notebook or a printed chapter</em></span><span class="soon">Coming soon</span></div>`}
       <label class="st-f"><span>…or paste your notes</span><textarea id="stText" rows="7" placeholder="Paste a chapter, a summary or your class notes here."></textarea></label>
       <div id="stErr" class="st-err" hidden></div>
       <button class="btn-primary btn-xl" data-save>Save chapter</button>`;
@@ -151,8 +153,10 @@ export class StudyHub {
     B.querySelector('[data-home]').onclick = () => { this.view = 'home'; this.render(); };
     const fi = B.querySelector('#stFile'); B.querySelector('[data-file]').onclick = () => fi.click();
     fi.onchange = async () => { const f = fi.files[0]; if (!f) return; const fn = B.querySelector('#stFileName'); fn.textContent = `Reading ${f.name}…`;
-      try { fileText = tidy(await extractText(f)); fn.textContent = `✓ ${f.name} · ${fileText.split(/\s+/).length.toLocaleString()} words`; const t = B.querySelector('#stTitle'); if (!t.value) t.value = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 80); }
-      catch (e) { fileText = ''; fn.textContent = ''; this.err(e.message === 'unsupported' ? 'That file type isn’t supported yet. Use a PDF, a Word .docx or a text file, or paste the text.' : 'Couldn’t read that file. If it’s a scanned PDF (photos of pages), paste the text instead.'); } };
+      try { fileText = tidy(await extractText(f));
+        if (/\.pdf$/i.test(f.name) && fileText.split(/\s+/).length < 25) { fileText = ''; fn.textContent = ''; return this.err('This PDF looks scanned (photos of pages). Reading scanned pages is coming soon. For now, paste the text below.'); }
+        fn.textContent = `✓ ${f.name} · ${fileText.split(/\s+/).length.toLocaleString()} words`; const t = B.querySelector('#stTitle'); if (!t.value) t.value = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 80); }
+      catch (e) { fileText = ''; fn.textContent = ''; this.err(e.message === 'unsupported' ? 'That file type isn’t supported yet. Use a PDF, a Word .docx or a text file, or paste the text.' : 'Couldn’t read that file. Reading scanned pages and photos is coming soon. For now, paste the text below.'); } };
     B.querySelector('#stText').onkeydown = e => e.stopPropagation(); B.querySelectorAll('input').forEach(i => i.onkeydown = e => e.stopPropagation());
     B.querySelector('[data-save]').onclick = async () => {
       const text = tidy([fileText, B.querySelector('#stText').value].filter(Boolean).join('\n\n')); const words = text ? text.split(/\s+/).length : 0;
@@ -200,7 +204,7 @@ export class StudyHub {
     }
     if (!qs.length) qs = ch ? buildQuestions(ch.text, 6) : careerQuestions(this.d.CAREERS, building, 5);
     const busy = B && B.querySelector('.st-busy'); if (busy) busy.remove();
-    if (qs.length < 2) return this.d.toast(ch ? 'Not enough clear sentences to build questions from. Try adding more complete notes.' : 'No questions available for this workplace yet.');
+    if (qs.length < 2) return this.d.toast(ch ? 'Smarter questions for short and bullet-point notes are coming soon. For now, add a few full sentences to this chapter.' : 'No questions available for this workplace yet.');
     const b = this.bInfo(building); const id = `study_${ch ? ch.id : 'gen'}_${building}`;
     const meta = { building, title: ch ? `Study: ${ch.title}` : `Career quiz: ${b.name}`, badge: ch ? `${b.name} · ${ch.subject || 'Study'} practice` : `${b.name} explorer`, icon: b.icon,
       who: b.name, explain: ch ? `You practised “${ch.title}” at ${b.name}.` : `You explored what the team at ${b.name} does.` };

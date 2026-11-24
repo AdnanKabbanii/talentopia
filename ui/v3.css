@@ -352,3 +352,7 @@ body.touch #eBtn,body.touch #runBtn{display:none!important}
 body.dlg #nav,body.dlg #joy,body.dlg #prompt{opacity:0!important;pointer-events:none!important}
 @media (max-width:760px){.qz-q{font-size:15px}.qz-opts{gap:6px}.qz-opts button{min-height:46px!important;font-size:13.5px}}
 @media (max-width:760px){body.dlg #toast,body.panel-open #toast{bottom:auto!important;top:calc(158px + var(--safe-t))!important}}
+.st-lock{display:flex;align-items:center;gap:12px;padding:11px 12px;margin:10px 0;border-radius:16px;background:rgba(255,255,255,.5);border:1px dashed rgba(17,24,39,.14);cursor:default;user-select:none}
+.st-lock-ic{width:36px;height:36px;flex:0 0 auto;border-radius:11px;display:grid;place-items:center;background:rgba(17,24,39,.06);font-size:17px;filter:grayscale(.4);opacity:.8}
+.st-lock-t{flex:1;min-width:0;opacity:.75}.st-lock-t b{display:block;font-size:13.5px}.st-lock-t em{display:block;font-style:normal;font-size:12px;color:var(--muted)}
+.st-lock .soon{flex:0 0 auto;font-size:10.5px;letter-spacing:.3px}
