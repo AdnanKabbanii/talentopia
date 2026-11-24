@@ -12,11 +12,11 @@ export const CITY = { minX: -340, maxX: 420, minZ: -215, maxZ: 215 };
 
 export function buildStreets(ctx) {
   // base ground (beyond the city: grass), city blocks paved / landscaped by the districts
-  ctx.box(40, -0.2, 0, 4200, 0.2, 4200, M('meadow'), { shadow: false });
+  ctx.box(40, -0.26, 0, 4200, 0.2, 4200, M('meadow'), { shadow: false }); // top 6 cm below the roads: no distant z-fighting
   // roadways
   const road = (x, z, w, d) => { ctx.box(x, 0, z, w, 0.02, d, M('asphalt'), { shadow: false }); };
   for (const z of ZS) road((X0 + X1) / 2, z, X1 - X0 + ROAD, ROAD);
-  for (const x of XS) road(x, (Z0 + Z1) / 2, ROAD, Z1 - Z0 + ROAD);
+  for (const x of XS) for (let i = 0; i < ZS.length - 1; i++) { const a = ZS[i] + ROAD / 2, b = ZS[i + 1] - ROAD / 2; road(x, (a + b) / 2, ROAD, b - a); } // no overlap with the cross streets at intersections
   // lane markings per segment (between intersections)
   const marks = (x, z, len, alongX) => { const g = new THREE.PlaneGeometry(ROAD, len); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * len / 12);
     ctx.geo(g, M('roadLines'), mat4(x, 0.025, z, alongX ? Math.PI / 2 : 0, 1, 1, 1, -Math.PI / 2), false); };
@@ -27,11 +27,11 @@ export function buildStreets(ctx) {
   const curbs = (x0, x1, z0, z1) => ctx.box((x0 + x1) / 2, 0, (z0 + z1) / 2, x1 - x0, 0.16, z1 - z0, M('curb'), { shadow: false });
   for (const z of ZS) for (let i = 0; i < XS.length - 1; i++) {
     const a = XS[i] + ROAD / 2, b = XS[i + 1] - ROAD / 2;
-    for (const s of [-1, 1]) { const zz0 = z + s * ROAD / 2, zz1 = z + s * HALF; walk(a, b, Math.min(zz0, zz1), Math.max(zz0, zz1)); curbs(a, b, z + s * (ROAD / 2 + 0.1) - 0.1, z + s * (ROAD / 2 + 0.1) + 0.1); }
+    for (const s of [-1, 1]) { const zz0 = z + s * ROAD / 2, zz1 = z + s * HALF; walk(a, b, Math.min(zz0, zz1), Math.max(zz0, zz1)); curbs(a, b, z + s * (ROAD / 2 + 0.09) - 0.11, z + s * (ROAD / 2 + 0.09) + 0.11); }
   }
   for (const x of XS) for (let i = 0; i < ZS.length - 1; i++) {
     const a = ZS[i] + HALF, b = ZS[i + 1] - HALF;
-    for (const s of [-1, 1]) { const xx0 = x + s * ROAD / 2, xx1 = x + s * HALF; walk(Math.min(xx0, xx1), Math.max(xx0, xx1), a, b); curbs(x + s * (ROAD / 2 + 0.1) - 0.1, x + s * (ROAD / 2 + 0.1) + 0.1, a, b); }
+    for (const s of [-1, 1]) { const xx0 = x + s * ROAD / 2, xx1 = x + s * HALF; walk(Math.min(xx0, xx1), Math.max(xx0, xx1), a, b); curbs(x + s * (ROAD / 2 + 0.09) - 0.11, x + s * (ROAD / 2 + 0.09) + 0.11, a, b); }
   }
   // outer stubs where streets end (keep pavement continuous at the grid edges)
   for (const x of XS) for (const z of ZS) {

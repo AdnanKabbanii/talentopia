@@ -53,7 +53,7 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 TX.setAniso(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xd3dde8, 260, 2100);
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.15, 2500);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.2, 2500); // near 0.2: more depth precision for ground layers
 camera.position.set(0, 40, 120);
 const hemi = new THREE.HemisphereLight(0xe3ecff, 0x8f8270, 0.55); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0dc, 2.7); sun.castShadow = true;
