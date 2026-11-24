@@ -26,12 +26,12 @@ export function createUI({ progress, store, onTravel }) {
   let staged = null; api.setStaged = k => { staged = k; $('dialog').classList.toggle('staged', !!k); document.body.classList.toggle('staged', !!k); };
   api.stage = (key, ev, data) => (api.onStage ? api.onStage(key, ev, data) : 0) || 0;
   api.dialog = (who, html, opts = [], note = '') => {
-    const d = $('dialog'); d.style.display = 'block'; d.classList.remove('wide'); d.classList.toggle('staged', !!staged); setMode('dialog');
+    const d = $('dialog'); d.style.display = 'block'; document.body.classList.add('dlg'); d.classList.remove('wide'); d.classList.toggle('staged', !!staged); setMode('dialog');
     d.innerHTML = `<div class="who">${esc(who)}</div><p>${html}</p><div class="opts"></div>${note ? `<div class="note">${note}</div>` : ''}`;
     const o = d.querySelector('.opts'); opts.forEach(op => { const b = document.createElement('button'); b.innerHTML = op.label; b.onclick = () => op.fn(b); o.appendChild(b); });
     return d;
   };
-  api.closeDialog = (keepStage) => { const keep = keepStage === true; $('dialog').style.display = 'none'; if (staged && !keep) api.stage(staged, 'close'); setMode(keep ? 'dialog' : 'walk'); };
+  api.closeDialog = (keepStage) => { const keep = keepStage === true; $('dialog').style.display = 'none'; document.body.classList.remove('dlg'); if (staged && !keep) api.stage(staged, 'close'); setMode(keep ? 'dialog' : 'walk'); };
   api.closeAll = () => { api.closeDialog(); api.closeMap(); $('done').style.display = 'none'; };
   api.renderObjectives = (OBJ, idx) => {
     $('objList').innerHTML = OBJ.map((o, i) => `<li class="${i < idx ? 'ok' : i === idx ? 'now' : ''}"><b>${i < idx ? '✓' : i + 1}</b><span>${esc(o.t)}</span></li>`).join('');

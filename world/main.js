@@ -27,6 +27,7 @@ import { Speech } from './speech.js';
 import { Staging } from './staging.js';
 import { loadVehicles, makeVehicle } from './vehicles.js';
 import { buildStreetLife } from './streetlife.js';
+import { StudyHub } from './study.js';
 import { PRESETS, loadSettings, saveSettings, resolvePreset, openSettings } from './settings.js';
 
 const $ = id => document.getElementById(id);
@@ -356,7 +357,7 @@ function updatePlayer(dt) {
   if (mag > 0.05) {
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), rx = Math.cos(camYaw), rz = -Math.sin(camYaw);
     desX = rx * ix + fx * iz; desZ = rz * ix + fz * iz; const l = Math.hypot(desX, desZ) || 1; desX /= l; desZ /= l;
-    desSpeed = joy.on && !running ? (mag < 0.6 ? SPEED.walk * Math.max(0.4, mag / 0.6) : SPEED.jog) : pace;
+    desSpeed = joy.on && !running ? (mag < 0.6 ? SPEED.walk * Math.max(0.4, mag / 0.6) : mag > 0.93 ? SPEED.sprint * 0.8 : SPEED.jog) : pace;
   } else if (P.route.length && mode === 'walk') {
     // stuck detection: if we barely moved for a while, sidestep around the obstacle
     P.stuckT = (P.stuckT || 0) + dt; if (P.stuckT > 0.8) { const moved = P.stuckFrom ? Math.hypot(P.pos.x - P.stuckFrom.x, P.pos.z - P.stuckFrom.z) : 9; P.stuckFrom = P.pos.clone(); P.stuckT = 0;
@@ -514,7 +515,7 @@ canvas.addEventListener('pointerup', e => { if (drag && drag.moved < 6) click(e)
 canvas.addEventListener('wheel', e => { if (mode === 'lab') labOrbit.dist = THREE.MathUtils.clamp(labOrbit.dist * (1 + e.deltaY * 0.001), 0.6, 4); else camDist = THREE.MathUtils.clamp(camDist * (1 + e.deltaY * 0.001), 2.2, 16); e.preventDefault(); }, { passive: false });
 // touch joystick
 if (isTouch) {
-  $('joy').style.display = 'block'; $('eBtn').style.display = 'block'; $('runBtn').style.display = 'block';
+  $('joy').style.display = 'block'; $('eBtn').style.display = 'block'; $('runBtn').style.display = 'block'; document.body.classList.add('touch');
   const J = $('joy'), K = J.querySelector('i'); let jid = null;
   const setJ = e => { const r = J.getBoundingClientRect(); let x = (e.clientX - r.left - 60) / 50, y = (e.clientY - r.top - 60) / 50; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } joy.x = x; joy.y = y; K.style.transform = `translate(${x * 35}px,${y * 35}px)`; };
   J.addEventListener('pointerdown', e => { jid = e.pointerId; try { J.setPointerCapture(jid); } catch (err) {} joy.on = true; P.route = []; setJ(e); audioStart(); });
@@ -629,7 +630,7 @@ function interact() {
   else if (it.kind === 'talk') talk(it.n);
 }
 function faceTowards(x, z) { P.yaw = Math.atan2(x - P.pos.x, z - P.pos.z); }
-function talk(n) { P.route = []; P.routeCb = null; conv.start(n); }
+function talk(n) { closePanel(); P.route = []; P.routeCb = null; conv.start(n); }
 // ------------------------------------------------------------------ physically staged missions (Milestone D)
 const staging = new Staging({
   scene, ctx, ui, camera, player: () => player,
@@ -657,7 +658,7 @@ const conv = new Conversations({
   onStart: n => { if (n.role === 'Receptionist · Maya') event('talk:reception'); if (player && n.c) player.lookAt(headPos(n.c, new THREE.Vector3())); if (P.seated) { P.seated = false; player.sitDown(false); } },
 });
 function runAction(s) {
-  faceTowards(s.x, s.z);
+  closePanel(); faceTowards(s.x, s.z);
   const pro = PRO_CHARS.find(n => n.building === s.building && Math.hypot(n.x - s.x, n.z - s.z) < 5);
   if (pro && pro.c) pro.c.play(pro.c.acts.Nod ? 'Nod' : 'Talk', { lock: false });
   if (s.action === 'hosp:reception') { const maya = PRO_CHARS.find(n => n.role === 'Receptionist · Maya'); return maya && maya.c ? talk(maya) : reception(); }
@@ -900,6 +901,23 @@ function passport(tab) {
     onGo: fid => { const f = FEATURED.find(x => x.id === fid); if (f) { mode = 'walk'; whenHospital(() => travelTo(f)); } }, onAvatar: () => { mode = 'walk'; openAvatarStudioInWorld(); } }, tab);
   panelMode();
 }
+// ------------------------------------------------------------------ Study Hub: the student's own chapters, practised inside the careers that use them
+const study = new StudyHub({ progress, store, CAREERS, FEATURED, DISTRICTS, ACTIVITIES, toast: m => ui.toast(m), onClose: panelClosed, play: (id, b, here) => playStudy(id, b, here) });
+function openStudy(view) { if (!player) return; ui.closeAll(); if (wv.active) return wv.close(() => openStudy(view)); if (conv.active) conv.end(); setNav('study'); study.open(view); panelMode(); }
+function playStudy(id, building, here) {
+  mode = 'walk'; setNav('explore'); const f = FEATURED.find(x => x.id === building);
+  const pros = PRO_CHARS.filter(n => n.building === building && n.c); const pro = pros.find(n => !/recept/i.test(n.role)) || pros[0]; if (pro) ACTIVITIES[id].who = pro.role;
+  const run = () => { ui.closeAll(); if (pro && pro.c) { player.lookAt(headPos(pro.c, new THREE.Vector3())); pro.c.play(pro.c.acts.Talk ? 'Talk' : 'Nod', { lock: false }); }
+    ui.activity(id, res => { if (res && res.done) event('act:' + id); }, ctx.hooks); };
+  if (here || !f || P.inside === f) return run();
+  // fade, arrive inside the workplace beside the professional who runs the session, then start
+  whenHospital(() => { const fade = $('fade'); fade.style.opacity = 1;
+    setTimeout(() => { const c = f.inside || { x: (f.x0 + f.x1) / 2, z: (f.z0 + f.z1) / 2 }; let x = c.x, z = c.z;
+      if (pro) { const dx = c.x - pro.x, dz = c.z - pro.z, l = Math.hypot(dx, dz) || 1; x = pro.x + dx / l * 1.7; z = pro.z + dz / l * 1.7; }
+      P.pos.set(x, 0, z); P.pos.y = groundAt(x, z, 2); P.route = []; P.speed = 0; if (pro) P.yaw = Math.atan2(pro.x - x, pro.z - z); camYaw = P.yaw + Math.PI;
+      camTarget.set(P.pos.x, P.pos.y + 1.55, P.pos.z); if (player) player.root.position.copy(P.pos);
+      setTimeout(() => { fade.style.opacity = 0; run(); }, 300); }, 400); });
+}
 function nova(view) {
   if (!player) return; ui.closeAll(); if (wv.active) return wv.close(() => nova(view)); if (conv.active) conv.end();
   openNova({ touch: isTouch, onClose: panelClosed, passport: () => { mode = 'walk'; passport(); }, world: () => { mode = 'walk'; openWorldView(); },
@@ -945,6 +963,7 @@ document.querySelectorAll('#nav [data-nav]').forEach(b => b.onclick = () => {
   if (k === 'explore') { if (wv.active) return wv.close(); ui.closeAll(); if (conv.active) conv.end(); resetCamera(); setNav('explore'); }
   if (k === 'world') { if (wv.active) wv.fit(); else openWorldView(); }
   if (k === 'passport') passport();
+  if (k === 'study') openStudy();
   if (k === 'avatar') openAvatarStudioInWorld();
 });
 $('mini').onclick = () => { if (mode === 'walk') ui.openMap(mapData()); };

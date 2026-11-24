@@ -148,6 +148,30 @@ export function runActivity(id, H, cb) {
   const leave = `<button class="secondary" data-x>Leave</button>`;
   const wire = (o) => { const x = o.querySelector('[data-x]'); if (x) x.onclick = close; };
 
+  if (a.type === 'quiz') { // Study Hub: multiple choice from the student's own notes (or general career questions)
+    const qs = a.questions || []; if (!qs.length) { close(); return; }
+    let i = 0, right = 0; const missed = [];
+    const qshell = body => { const d = H.dialog(a.who, i === 0 ? `<b>${esc(a.title)}.</b> ${a.intro || ''}` : `<b>${esc(a.title)}</b>`, []); d.classList.add('wide'); d.scrollTop = 0; const o = d.querySelector('.opts'); o.innerHTML = body; return o; };
+    const render = () => {
+      const q = qs[i];
+      const o = qshell(`<div class="qz-k"><span>Question ${i + 1} of ${qs.length}</span><span class="qz-dots">${qs.map((_, k) => `<i class="${k < i ? 'd' : k === i ? 'c' : ''}"></i>`).join('')}</span></div>
+        <div class="qz-q">${esc(q.q)}</div><div class="qz-opts">${q.options.map((op, k) => `<button data-k="${k}"><b>${'ABCD'[k]}</b><span>${esc(op)}</span></button>`).join('')}</div>
+        <div class="qz-fb"></div><div class="row qz-act">${leave}</div>`);
+      o.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
+        const k = +b.dataset.k, ok = k === q.answer; if (ok) right++; else { mistakes++; if (q.topic) missed.push(q.topic); S('wrong'); }
+        o.querySelectorAll('[data-k]').forEach(x => { x.disabled = true; const kk = +x.dataset.k; if (kk === q.answer) x.classList.add('good'); else if (kk === k) x.classList.add('bad'); });
+        o.querySelector('.qz-fb').innerHTML = fb(ok, `${ok ? '✓ Correct.' : `Not quite. The answer is <b>${esc(q.options[q.answer])}</b>.`}${q.explain ? ` <span class="qz-ex">${esc(q.explain)}</span>` : ''}`);
+        const nx = document.createElement('button'); nx.className = 'primary'; nx.textContent = i < qs.length - 1 ? 'Next question' : 'See my result';
+        const act = o.querySelector('.qz-act'); act.prepend(nx); nx.focus({ preventScroll: true }); nx.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        nx.onclick = () => { i++; if (i < qs.length) return render();
+          const ratio = right / qs.length; mistakes = ratio >= 0.85 ? 0 : ratio >= 0.6 ? 1 : 2; // stars from the share answered correctly
+          a.onResult && a.onResult({ right, total: qs.length, missed });
+          finish(`<div class="task ${ratio >= 0.6 ? 'ok' : 'no'}">You answered <b>${right} of ${qs.length}</b> correctly.${missed.length ? ` Review: ${missed.slice(0, 4).map(esc).join(', ')}.` : ''}</div>`); };
+      });
+      wire(o);
+    };
+    render();
+  }
   if (a.type === 'rank') {
     let order = shuffle(a.items.map((_, i) => i)); while (order.every((v, i) => v === i)) order = shuffle(order);
     const render = (msg = '', marks = null) => {

@@ -285,3 +285,70 @@ body.panel-open #nav,body.panel-open #joy,body.panel-open #eBtn,body.panel-open 
   #flyCap{display:none}
 }
 @media (max-height:500px) and (orientation:landscape){#mini,#hint,#credits{display:none!important}}
+
+/* ------------------------------------------------ V4 phone pass */
+/* touch: the contextual prompt pill IS the action button (E and RUN buttons hidden); push the joystick to its rim to run */
+body.touch #eBtn,body.touch #runBtn{display:none!important}
+@media (max-width:760px){
+  body.touch #prompt{left:auto!important;right:max(12px,var(--safe-r))!important;bottom:calc(98px + var(--safe-b))!important;max-width:calc(100vw - 168px);min-height:58px;padding:8px 8px 8px 14px!important;
+    animation:prIn .25s var(--ease) both;box-shadow:var(--glass-shadow),0 0 0 3px rgba(141,112,255,.28)!important}
+  body.touch #prompt kbd{min-width:52px;height:44px;font-size:14px}
+  #toast{top:auto!important;bottom:calc(176px + var(--safe-b))!important;max-width:calc(100vw - 32px)!important;font-size:13px}
+  #nav{gap:0;padding:5px}#nav button{min-width:0;flex:1 1 0;padding:6px 4px;font-size:10.5px}
+  #nav{left:max(8px,var(--safe-l));right:max(8px,var(--safe-r));transform:none;justify-content:space-between}
+  /* workplace activity sheets: actions stay reachable while the list scrolls */
+  #dialog:not(.staged){max-height:72vh!important}
+  #dialog .opts>.row:last-child,#dialog .qz-act{position:sticky;bottom:-14px;margin:10px -4px -6px;padding:10px 4px 6px;background:linear-gradient(180deg,rgba(246,248,252,0),rgba(246,248,252,.96) 28%);z-index:2}
+  #top{top:calc(8px + var(--safe-t))!important}
+}
+@keyframes prIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+#nav button span{white-space:nowrap}
+
+/* ------------------------------------------------ Study Hub */
+#panel.study .pn-body{padding-top:4px}
+.st-hd h2{margin:4px 0 4px;font-size:24px;letter-spacing:-.5px;line-height:1.15}.st-hd p{margin:0 0 12px;color:var(--ink2);font-size:14px;line-height:1.45}
+.st-seg{display:grid;grid-template-columns:1fr 1fr;padding:4px;border-radius:999px;background:rgba(17,24,39,.06);margin:0 0 10px}
+.st-seg button{min-height:40px;border-radius:999px;font-weight:700;font-size:13.5px;color:var(--ink2);background:transparent}
+.st-seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(17,24,39,.12)}
+.st-lvl{display:flex;align-items:center;gap:6px;margin:0 0 14px;font-size:13px;font-weight:700;color:var(--muted)}
+.st-lvl button{min-height:34px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.7);border:1px solid rgba(17,24,39,.08);font-weight:700;font-size:12.5px;color:var(--ink2)}
+.st-lvl button.on{background:rgba(141,112,255,.16);border-color:rgba(141,112,255,.5);color:#4c38c4}
+.st-list{display:flex;flex-direction:column;gap:8px;margin:14px 0 6px}
+.st-ch{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px;border-radius:18px;background:rgba(255,255,255,.78);border:1px solid rgba(17,24,39,.06)}
+.st-ch:active,.st-car:active{transform:scale(.985)}
+.st-ch-ic{width:44px;height:44px;flex:0 0 auto;border-radius:14px;display:grid;place-items:center;background:var(--c);font-size:20px;font-weight:800;color:var(--navy)}
+.st-ch-t{flex:1;min-width:0}.st-ch-t b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.st-ch-t em{display:block;font-style:normal;font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-new{font-size:11px;font-weight:800;color:#4c38c4;background:rgba(141,112,255,.14);padding:4px 9px;border-radius:999px}
+.st-m{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:48px}.st-m b{font-size:13px}.st-m i{display:block;width:48px;height:5px;border-radius:5px;background:linear-gradient(90deg,var(--violet) var(--p),rgba(17,24,39,.1) var(--p))}
+.st-empty,.st-note{font-size:13.5px;line-height:1.5;color:var(--ink2);margin:12px 0}.st-empty{padding:14px;border-radius:16px;background:rgba(255,255,255,.6);border:1px dashed rgba(17,24,39,.15)}
+.st-cars{display:flex;flex-direction:column;gap:8px;margin:6px 0 12px}
+.st-car{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:10px 12px;border-radius:18px;background:rgba(255,255,255,.8);border:1px solid rgba(17,24,39,.06);min-height:60px}
+.st-car i{width:40px;height:40px;flex:0 0 auto;border-radius:12px;display:grid;place-items:center;font-style:normal;font-weight:800;background:var(--c);color:var(--navy)}
+.st-car span:not(.st-arrow){flex:1;min-width:0}.st-car b{display:block;font-size:14px}.st-car em{display:block;font-style:normal;font-size:12px;color:var(--muted)}
+.st-arrow{font-size:18px;color:#5b45d9;font-weight:800}
+.st-sub{font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#6b55c9;margin:14px 0 2px}
+.st-priv{font-size:11.5px;line-height:1.45;color:var(--muted);margin:16px 2px 0}
+.st-back{background:none;border:0;font-weight:700;font-size:13px;color:#5b45d9;padding:6px 0;margin-bottom:4px}
+.st-f{display:flex;flex-direction:column;gap:6px;margin:10px 0}.st-f span{font-size:12.5px;font-weight:700;color:var(--ink2)}
+.st-f input,.st-f textarea{font:inherit;font-size:16px;padding:12px 14px;border-radius:14px;border:1px solid rgba(17,24,39,.12);background:rgba(255,255,255,.9);color:var(--ink);resize:vertical}
+.st-f input:focus,.st-f textarea:focus{outline:2px solid rgba(141,112,255,.55);outline-offset:1px}
+.st-drop{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px;border-radius:16px;border:1.5px dashed rgba(141,112,255,.45);background:rgba(141,112,255,.06);margin:12px 0}
+.st-drop em{font-style:normal;font-size:12px;color:var(--muted)}.st-fn{font-size:13px;font-weight:700;color:#1f7a4d}
+.st-err{padding:10px 12px;border-radius:12px;background:#fff1f1;color:#8a1f1f;font-size:13px;margin:8px 0}
+.st-busy{display:flex;align-items:center;gap:10px;padding:12px 14px;margin:0 0 10px;border-radius:14px;background:rgba(141,112,255,.12);font-weight:700;font-size:13.5px;color:#4c38c4}
+.st-busy span{width:16px;height:16px;border-radius:50%;border:2.5px solid rgba(91,69,217,.25);border-top-color:#5b45d9;animation:stSpin .8s linear infinite}
+@keyframes stSpin{to{transform:rotate(360deg)}}
+.sh-load{padding:24px 0;color:var(--muted);font-weight:600}
+/* quiz (Study Hub sessions inside a workplace) */
+.qz-k{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;color:#6b55c9;letter-spacing:.4px;margin:6px 0 8px}
+.qz-dots{display:flex;gap:4px}.qz-dots i{width:8px;height:8px;border-radius:50%;background:rgba(17,24,39,.12)}.qz-dots i.d{background:var(--violet)}.qz-dots i.c{background:var(--cyan);box-shadow:0 0 0 3px rgba(66,219,255,.25)}
+.qz-q{font-size:16px;font-weight:700;line-height:1.4;color:var(--ink);margin:0 0 10px}
+.qz-opts{display:flex;flex-direction:column;gap:8px}
+.qz-opts button{display:flex!important;align-items:center;gap:10px;text-align:left;min-height:52px!important;padding:10px 12px!important;border-radius:16px!important;background:rgba(255,255,255,.85)!important;border:1.5px solid rgba(17,24,39,.08)!important;font-size:14px;line-height:1.35;color:var(--ink)!important}
+.qz-opts button b{flex:0 0 auto;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:rgba(141,112,255,.14);color:#4c38c4;font-size:12px}
+.qz-opts button.good{border-color:#2f9e6a!important;background:#eafaf2!important}.qz-opts button.good b{background:#2f9e6a;color:#fff}
+.qz-opts button.bad{border-color:#d0453b!important;background:#fff1f0!important}.qz-opts button.bad b{background:#d0453b;color:#fff}
+.qz-opts button:disabled{cursor:default}.qz-ex{display:block;margin-top:4px;font-weight:500;color:var(--ink2)}
+body.dlg #nav,body.dlg #joy,body.dlg #prompt{opacity:0!important;pointer-events:none!important}
+@media (max-width:760px){.qz-q{font-size:15px}.qz-opts{gap:6px}.qz-opts button{min-height:46px!important;font-size:13.5px}}
+@media (max-width:760px){body.dlg #toast,body.panel-open #toast{bottom:auto!important;top:calc(158px + var(--safe-t))!important}}
