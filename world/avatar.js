@@ -1,6 +1,7 @@
 // Talentopia V2 avatar: a customisable MPFB/MakeHuman (CC0) body with morph targets, swappable hair/outfit/shoes/hat parts bound to
 // one skeleton, material variations (skin, eyes, hair, outfit tint), procedural eyewear, and the Avatar Studio UI.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 
@@ -20,7 +21,42 @@ function augmentCatalog(cat) {
   // tailored cut with trousers: the tailored jacket (skirt pieces removed) worn over the suit trousers (jacket and shirt pieces removed)
   const tf = cat.parts.outfit.find(p => p.id === 'talentopia_f'), ms = cat.parts.outfit.find(p => p.id === 'male_elegantsuit01');
   if (tf && ms) { tf.compose = [{ file: tf.file, keep: 'upper', bit: cat.hideBits.female_elegantsuit01 }, { file: ms.file, keep: 'lower', bit: cat.hideBits.male_elegantsuit01 }]; tf.label = 'Talentopia · tailored cut'; }
+  // V4 Signature look (approved character concept): iridescent lilac jacket with light piping over pearl trousers
+  if (tf && tf.compose) { cat.parts.outfit.unshift({ ...tf, id: 'signature_f', label: 'Signature · iridescent', style: 'signature', compose: tf.compose.map(c => ({ ...c })) }); cat.hideBits.signature_f = cat.hideBits.talentopia_f; }
+  const pt = cat.parts.hair.find(p => p.id === 'ponytail01'); if (pt) cat.parts.hair.splice(cat.parts.hair.indexOf(pt) + 1, 0, { ...pt, id: 'bun01', label: 'Messy bun', bun: true });
   return cat;
+}
+const pearlCache = {};
+function pearlMap(tex, rgb, lo, hi) { const k0 = tex.uuid + rgb.join(); let t = pearlCache[k0]; if (t) return t;
+  const img = tex.image, c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4) { const l = (0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2]) / 255, k = Math.min(1.08, lo + hi * l); p[i] = Math.min(255, rgb[0] * k); p[i + 1] = Math.min(255, rgb[1] * k); p[i + 2] = Math.min(255, rgb[2] * k); }
+  g.putImageData(d, 0, 0); t = new THREE.CanvasTexture(c); t.flipY = tex.flipY; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return (pearlCache[k0] = t); }
+function signatureMat(m, geo, part) { // part: 'upper' jacket (iridescent lilac, glowing piping) | 'lower' trousers (pearl)
+  const jacket = part !== 'lower';
+  const n = new THREE.MeshPhysicalMaterial({ map: m.map ? pearlMap(m.map, jacket ? [198, 178, 236] : [238, 235, 242], jacket ? 0.8 : 0.62, jacket ? 0.16 : 0.42) : null,
+    normalMap: m.normalMap || null, side: m.side, transparent: false, alphaTest: Math.max(0.5, m.alphaTest || 0), roughness: jacket ? 0.42 : 0.5, metalness: jacket ? 0.08 : 0.02,
+    iridescence: jacket ? 0.65 : 0, iridescenceIOR: 1.32, iridescenceThicknessRange: [160, 520], sheen: jacket ? 0.35 : 0.3, sheenColor: new THREE.Color(jacket ? 0xd8c8ff : 0xf2eef8), sheenRoughness: 0.45,
+    clearcoat: jacket ? 0.2 : 0, clearcoatRoughness: 0.25, envMapIntensity: 1.25,
+    emissive: new THREE.Color(0xf4efff), emissiveMap: pipingTex(geo), emissiveIntensity: jacket ? 1.5 : 0.35 });
+  n.name = m.name; return n;
+}
+// messy bun: three twisted hair loops and a core, high on the crown, plus two loose strands framing the face (all on the head bone)
+function bunGeometry(centre, up, back, side) {
+  const parts = [], basis = new THREE.Matrix4().makeBasis(side, up, back);
+  const layer = (R, r, tilt, spin, sx = 1) => { const g = new THREE.TorusGeometry(R, r, 10, 40); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getY(i), uv.getX(i) * 3); // strands run around the loop
+    g.rotateX(Math.PI / 2 + tilt); g.rotateY(spin); g.scale(sx, 0.78, 1); return g; };
+  parts.push(layer(0.034, 0.019, 0.25, 0.3), layer(0.026, 0.017, -0.35, 1.4, 1.1), layer(0.02, 0.016, 0.6, 2.4, 0.9));
+  const core = new THREE.SphereGeometry(0.03, 16, 12); core.scale(1.05, 0.85, 1); parts.push(core);
+  for (const g of parts) { g.applyMatrix4(basis); g.translate(centre.x, centre.y, centre.z); }
+  return mergeGeometries(parts, false);
+}
+function strandGeometry(start, down, outward, front, len = 0.15) {
+  const seg = 10, pos = [], uv = [], idx = [], w = 0.011;
+  for (let i = 0; i <= seg; i++) { const t = i / seg, wave = Math.sin(t * Math.PI * 2.2) * 0.008, p = start.clone().addScaledVector(down, len * t).addScaledVector(outward, wave + 0.01 * t).addScaledVector(front, 0.006 * t);
+    const half = w * (1 - 0.7 * t); pos.push(p.x - outward.x * half, p.y - outward.y * half, p.z - outward.z * half, p.x + outward.x * half, p.y + outward.y * half, p.z + outward.z * half);
+    uv.push(0, t, 1, t); if (i < seg) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 const navyCache = {};
 function navyMap(tex) { let t = navyCache[tex.uuid]; if (t) return t;
@@ -101,6 +137,7 @@ export const PRESETS = {
 };
 // ready-made avatars offered during onboarding (portraits in assets/ui/avatars are renders of these exact configs)
 export const READY = [
+  { id: 'sofia', name: 'Sofia', cfg: { pres: -0.85, build: -0.12, muscle: 0.22, skin: 'young_caucasian_female', tone: 0.02, hair: 'bun01', hairColor: '#2b1c14', brows: 'eyebrow001', eyes: '#4a2f1d', cheekbones: 0.35, lipsFull: 0.3, eyesBig: 0.12, outfit: 'signature_f', outfitTint: '#ffffff', shoes: 'shoes03', shoesTint: '#f6f4fa', glasses: 'none', hat: 'none' } },
   { id: 'layla', name: 'Layla', cfg: { pres: -0.85, build: -0.1, muscle: 0.25, skin: 'young_asian_female', tone: -0.04, hair: 'long01', hairColor: '#1b1411', brows: 'eyebrow006', outfit: 'talentopia_f', outfitTint: '#ffffff', shoes: 'shoes06', cheekbones: 0.55, lipsFull: 0.35, eyesBig: 0.2, jawWide: 0, makeup: 'natural', eyes: '#5b3a22' } },
   { id: 'aria', name: 'Aria', cfg: { pres: -0.8, build: -0.05, muscle: 0.25, skin: 'young_african_female', hair: 'long01', hairColor: '#141012', brows: 'eyebrow001', outfit: 'female_elegantsuit01', outfitTint: '#5f6f9a', shoes: 'shoes01', cheekbones: 0.45, eyes: '#5b3a22' } },
   { id: 'leo', name: 'Leo', cfg: { pres: 0.85, build: 0.05, muscle: 0.5, skin: 'young_caucasian_male', hair: 'short02', hairColor: '#5a3a24', brows: 'eyebrow006', beard: 'stubble', outfit: 'male_casualsuit03', outfitTint: '#ffffff', shoes: 'shoes03', jawWide: 0.4, chinStrong: 0.3, eyes: '#3a6ea8' } },
@@ -317,10 +354,30 @@ export class AvatarModel {
             hairOcclusion(s0.geometry, c); if (s0.geometry.index && s0.geometry.attributes.normal && s0.geometry.attributes.uv && !s0.geometry.attributes.tangent) s0.geometry.computeTangents(); }
           for (const m of [].concat(s.material)) { if (m.map) m.map = grayCached(m.map); hairize(m, /afro/.test(id)); }
         }
+        if (info.style === 'signature') s.material = [].concat(s.material).length > 1 ? [].concat(s.material).map(m => signatureMat(m, s.geometry, keep)) : signatureMat(s.material, s.geometry, keep);
+        if (kind === 'hair' && info.bun) this.makeBun(s, s0, list);
         if (info.style === 'talentopia') for (const m of [].concat(s.material)) { if (m.map && m.map.image) m.map = navyMap(m.map); m.emissive = new THREE.Color(0x9d84ff); m.emissiveMap = pipingTex(s.geometry); m.emissiveIntensity = 1.7; m.roughness = 0.55; m.metalness = 0.04; m.needsUpdate = true; }
       }
       this.partMeshes[key] = list; return list;
     }));
+  }
+  makeBun(s, s0, list) { // ponytail minus its tail, plus a bun and two face-framing strands bound to the head bone
+    const sk = s.skeleton, hi = sk.bones.findIndex(b => b.name === 'head'); if (hi < 0) return;
+    const g0 = s0.geometry, pos = g0.attributes.position;
+    const hc = new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(s0.skeleton.boneInverses[hi]).invert()).add(new THREE.Vector3(0, 0.09, 0)).applyMatrix4(s0.bindMatrixInverse);
+    const f = this.front || 1, v = new THREE.Vector3();
+    const tail = i => { v.fromBufferAttribute(pos, i); const behind = (v.z - hc.z) * f; return v.y < hc.y - 0.105 || (v.y < hc.y - 0.035 && behind < -0.06); };
+    const idx = g0.index.array, keepIdx = []; let topY = -1e9, backZ = hc.z;
+    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i); if (v.y > topY) topY = v.y; if (v.y > hc.y && (v.z - hc.z) * f < (backZ - hc.z) * f) backZ = v.z; }
+    for (let i = 0; i < idx.length; i += 3) if (!(tail(idx[i]) && tail(idx[i + 1]) && tail(idx[i + 2]))) keepIdx.push(idx[i], idx[i + 1], idx[i + 2]);
+    const g = new THREE.BufferGeometry(); for (const k in g0.attributes) g.setAttribute(k, g0.attributes[k]); g.morphAttributes = g0.morphAttributes; g.morphTargetsRelative = g0.morphTargetsRelative; g.setIndex(keepIdx);
+    g.boundingSphere = g0.boundingSphere; s.geometry = g;
+    const up = new THREE.Vector3(0, 0.62, -0.78 * f).normalize(), back = new THREE.Vector3(0, 0.78, 0.62 * f).normalize(), side = new THREE.Vector3(1, 0, 0);
+    const centre = new THREE.Vector3(hc.x, topY - 0.075, hc.z + (backZ - hc.z) * 0.93);
+    const toBind = (geo) => { const n = geo.attributes.position.count; geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(new Array(n * 4).fill(0).map((_, k) => k % 4 ? 0 : hi), 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(new Array(n * 4).fill(0).map((_, k) => k % 4 ? 0 : 1), 4)); hairOcclusion(geo, hc); geo.computeTangents(); return geo; };
+    const add = (geo) => { const m = new THREE.SkinnedMesh(toBind(geo), s.material); m.name = s.name + '_bun'; m.frustumCulled = false; m.castShadow = true; m.bind(s.skeleton, s.bindMatrix); this.body.parent.add(m); list.push(m); };
+    add(bunGeometry(centre, up, back, side));
+    const down = new THREE.Vector3(0, -1, 0), fr = new THREE.Vector3(0, 0, f);
   }
   async apply() {
     const c = this.cfg, kinds = { hair: c.hair, outfit: c.outfit, shoes: c.shoes, hat: c.hat };
@@ -370,6 +427,7 @@ export class AvatarModel {
       for (const m of this.partMeshes[key]) for (const mt of [].concat(m.material)) {
         if (k === 'hair') mt.color.copy(hairC).multiplyScalar(1.15);
         if (k === 'outfit') mt.color.set(c.outfitTint);
+        if (k === 'shoes' && mt.map) { if (!mt.userData.map0) mt.userData.map0 = mt.map; const want = c.shoesTint ? pearlMap(mt.userData.map0, [246, 244, 250], 0.62, 0.42) : mt.userData.map0; if (mt.map !== want) { mt.map = want; mt.needsUpdate = true; } }
       }
     }
     for (const m of this.meshes) {
