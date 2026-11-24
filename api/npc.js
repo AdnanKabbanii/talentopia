@@ -40,7 +40,7 @@ Give general career information only, not medical, legal or financial advice for
     const cand = (j.candidates || [])[0];
     if ((j.promptFeedback && j.promptFeedback.blockReason) || !cand || cand.finishReason === 'SAFETY' || cand.finishReason === 'PROHIBITED_CONTENT') return res.status(200).json({ reply: declined });
     const reply = ((cand.content && cand.content.parts) || []).map(p => p.text || '').join(' ').replace(/[*_#`]/g, '').trim();
-    return res.status(200).json({ reply: reply || null });
+    return res.status(200).json({ reply: reply || null, model: g.model });
   } catch (e) {
     return res.status(502).json({ error: 'failed' });
   }

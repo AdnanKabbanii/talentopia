@@ -64,7 +64,7 @@ Reply as JSON: careerHook is one sentence linking the topic to this workplace; e
       && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < 4).slice(0, count)
       .map(q => ({ q: clip(q.q, 400), options: q.options.map(o => clip(o, 160)), answer: q.answer, explain: clip(q.explain, 400), topic: clip(q.topic, 40) }));
     if (!questions.length) return res.status(502).json({ error: 'empty' });
-    return res.status(200).json({ careerHook: clip(data.careerHook, 200), questions });
+    return res.status(200).json({ careerHook: clip(data.careerHook, 200), questions, model: g.model });
   } catch (e) {
     return res.status(502).json({ error: 'failed' });
   }
